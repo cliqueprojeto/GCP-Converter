@@ -2,6 +2,7 @@ name: Build & Release
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -9,7 +10,30 @@ permissions:
   contents: write
 
 jobs:
+  # Publica quando a versão do package.json ainda não tem Release (ou quando uma tag v* é enviada)
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v$VERSION já existe"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
   linux:
+    needs: check
+    if: needs.check.outputs.publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +53,8 @@ jobs:
             dist/*.AppImage
 
   windows:
+    needs: check
+    if: needs.check.outputs.publish == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +68,8 @@ jobs:
           path: dist/*.exe
 
   macos:
+    needs: check
+    if: needs.check.outputs.publish == 'true'
     strategy:
       matrix:
         arch: [arm64, x64]
@@ -63,16 +91,15 @@ jobs:
           path: dist/*.dmg
 
   release:
-    needs: [linux, windows, macos]
+    needs: [check, linux, windows, macos]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { path: artifacts, merge-multiple: true }
       - name: Notas da versão (CHANGELOG.md)
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ needs.check.outputs.version }}"
           awk -v v="$VERSION" '
             $0 ~ "^## \\[" v "\\]" {found=1; next}
             found && /^## \[/ {exit}
@@ -102,6 +129,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -la artifacts
-          gh release create "$GITHUB_REF_NAME" artifacts/* \
-            --title "GCP Converter ${GITHUB_REF_NAME}" \
+          TAG="v${{ needs.check.outputs.version }}"
+          gh release create "$TAG" artifacts/* \
+            --target "$GITHUB_SHA" \
+            --title "GCP Converter $TAG" \
             --notes-file notes.md

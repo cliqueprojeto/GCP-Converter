@@ -173,12 +173,8 @@ npm start
 ### Publicar uma nova versão
 
 1. Atualize `version` no `package.json` e adicione a seção da versão no `CHANGELOG.md`.
-2. Crie e envie a tag:
-   ```bash
-   git tag v1.0.1
-   git push origin v1.0.1
-   ```
-3. O GitHub Actions compila para Linux, Windows e macOS (Intel e Apple Silicon) e publica a Release com as notas do CHANGELOG. Os aplicativos já instalados detectam a nova versão sozinhos.
+2. Faça o commit e envie para a branch `main` (`git push`).
+3. O GitHub Actions percebe que essa versão ainda não tem Release, compila para Linux, Windows e macOS (Intel e Apple Silicon) e publica a Release com as notas do CHANGELOG. Os aplicativos já instalados detectam a nova versão sozinhos.
 
 ### Estrutura
 
