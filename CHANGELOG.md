@@ -3,6 +3,12 @@
 Todas as mudanças relevantes do GCP Converter são registradas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.0.1] - 2026-11-20
+
+### Corrigido
+- **Arch / BigLinux / Manjaro**: o pacote `.pkg.tar.zst` não instalava com dois cliques. Ele pedia dependências que não existem mais nos repositórios oficiais (`http-parser` e `libappindicator-gtk3`) e tinha a descrição em duas linhas, fora do padrão do pacman. Agora usa só dependências oficiais (`gtk3`, `nss`, `alsa-lib`, `libxss`, `libxtst`, `libnotify`, `mesa`, `at-spi2-core`, `xdg-utils`) e foi validado com o próprio pacman.
+- Removidas dependências desnecessárias do pacote Arch (`ffmpeg`, `libvpx` e outras): o GCP Converter já traz o próprio FFmpeg.
+
 ## [1.0.0] - 2026-11-20
 
 Primeira versão pública do **GCP Converter**, o conversor universal da série GCP.

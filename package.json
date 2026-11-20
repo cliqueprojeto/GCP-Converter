@@ -1,7 +1,7 @@
 {
   "name": "gcp-converter",
   "productName": "GCP Converter",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Conversor universal de áudio, vídeo, imagens, documentos e e-books, com compactação e conversão em lote.",
   "main": "electron/main.js",
   "homepage": "https://github.com/cliqueprojeto/GCP-Converter",
@@ -159,7 +159,20 @@
         "--pacman-optional-depends",
         "pandoc-cli: Markdown e formatos de texto",
         "--pacman-optional-depends",
-        "ghostscript: compactacao de PDF"
+        "ghostscript: compactacao de PDF",
+        "--description",
+        "Conversor universal de video, audio, imagens, documentos e e-books"
+      ],
+      "depends": [
+        "gtk3",
+        "nss",
+        "alsa-lib",
+        "libxss",
+        "libxtst",
+        "libnotify",
+        "mesa",
+        "at-spi2-core",
+        "xdg-utils"
       ]
     },
     "appImage": {
