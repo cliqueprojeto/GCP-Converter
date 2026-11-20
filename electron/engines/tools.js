@@ -61,6 +61,8 @@ const EXTERNAL = {
     url: 'https://www.libreoffice.org/download/download/',
     purpose: 'office',
     find() {
+      // mesmos locais procurados pelo GCP-PDF
+      try { return require('./gcp-pdf').libreOfficeCandidates().find((p) => fs.existsSync(p)) || null; } catch {}
       if (isWin) return globFirst([path.join(PF, 'LibreOffice', 'program', 'soffice.exe'), path.join(PF86, 'LibreOffice', 'program', 'soffice.exe')]) || which('soffice.exe');
       if (isMac) return globFirst(['/Applications/LibreOffice.app/Contents/MacOS/soffice']) || which('soffice');
       return which('soffice') || which('libreoffice');
@@ -80,17 +82,6 @@ const EXTERNAL = {
     versionArgs: ['--version'],
     install: { arch: 'sudo pacman -S calibre', deb: 'sudo apt install calibre', rpm: 'sudo dnf install calibre', mac: 'brew install --cask calibre', win: 'winget install calibre.calibre' }
   },
-  pandoc: {
-    name: 'Pandoc',
-    url: 'https://pandoc.org/installing.html',
-    purpose: 'markup',
-    find() {
-      if (isWin) return globFirst([path.join(LAD, 'Pandoc', 'pandoc.exe'), path.join(PF, 'Pandoc', 'pandoc.exe')]) || which('pandoc.exe');
-      return which('pandoc');
-    },
-    versionArgs: ['--version'],
-    install: { arch: 'sudo pacman -S pandoc-cli', deb: 'sudo apt install pandoc', rpm: 'sudo dnf install pandoc', mac: 'brew install pandoc', win: 'winget install JohnMacFarlane.Pandoc' }
-  },
   ghostscript: {
     name: 'Ghostscript',
     url: 'https://www.ghostscript.com/releases/gsdnld.html',
@@ -101,16 +92,6 @@ const EXTERNAL = {
     },
     versionArgs: ['--version'],
     install: { arch: 'sudo pacman -S ghostscript', deb: 'sudo apt install ghostscript', rpm: 'sudo dnf install ghostscript', mac: 'brew install ghostscript', win: 'winget install ArtifexSoftware.GhostScript' }
-  },
-  poppler: {
-    name: 'Poppler (pdftotext / pdftoppm)',
-    url: 'https://poppler.freedesktop.org/',
-    purpose: 'pdf',
-    find() {
-      return which(isWin ? 'pdftoppm.exe' : 'pdftoppm');
-    },
-    versionArgs: ['-v'],
-    install: { arch: 'sudo pacman -S poppler', deb: 'sudo apt install poppler-utils', rpm: 'sudo dnf install poppler-utils', mac: 'brew install poppler', win: 'winget install oschwartz10612.Poppler' }
   }
 };
 
@@ -132,11 +113,13 @@ async function detect(force = false) {
   const ff = ffmpegPath();
   result.ffmpeg = { id: 'ffmpeg', name: 'FFmpeg', bundled: true, path: ff, available: !!ff, version: ff ? await runVersion(ff, ['-version']) : '', url: 'https://ffmpeg.org', purpose: 'media' };
   result.chromium = { id: 'chromium', name: 'Chromium (PDF/HTML)', bundled: true, available: true, version: process.versions.chrome, purpose: 'render' };
-  result.builtin = { id: 'builtin', name: 'Bibliotecas JS (pdf-lib · mammoth · marked · JSZip)', bundled: true, available: true, version: '', purpose: 'document' };
+  result.builtin = { id: 'builtin', name: 'Motor de documentos GCP-PDF', bundled: true, available: true, version: '', purpose: 'document' };
+  result.ebooks = { id: 'ebooks', name: 'Motor de e-books (EPUB · MOBI · FB2 · CBZ)', bundled: true, available: true, version: '', purpose: 'ebookBuiltin' };
   await Promise.all(
     Object.entries(EXTERNAL).map(async ([id, def]) => {
       const p = def.find();
-      result[id] = { id, name: def.name, bundled: false, path: p, available: !!p, version: p ? await runVersion(p, def.versionArgs) : '', url: def.url, purpose: def.purpose, install: def.install };
+      const off = process.env.GCP_NO_EXTERNAL === '1';
+      result[id] = { id, name: def.name, bundled: false, optional: true, path: off ? null : p, available: off ? false : !!p, version: p ? await runVersion(p, def.versionArgs) : '', url: def.url, purpose: def.purpose, install: def.install };
     })
   );
   cache = result;

@@ -10,7 +10,7 @@ const DEFAULTS = {
   iconStyle: 'dark', // dark | light
   outputMode: 'source', // source | custom
   outputDir: '',
-  namePattern: '{name}', // tokens: {name} {ext} {target} {date} {time} {index}
+  namePattern: '{name}_{action}', // tokens: {name} {action} {ext} {target} {date} {time} {index}
   conflict: 'rename', // rename | overwrite | skip
   concurrency: 2,
   keepMetadata: true,

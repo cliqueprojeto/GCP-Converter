@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CFe><infCFe Id="CFe35260911111111000191590000123450001234567890" versao="0.08">
+<ide><cUF>35</cUF><cNF>123456</cNF><mod>59</mod><nserieSAT>900012345</nserieSAT><nCFe>001234</nCFe><dEmi>20260915</dEmi><hEmi>143012</hEmi><cDV>0</cDV><tpAmb>2</tpAmb><CNPJ>22222222000191</CNPJ><signAC>x</signAC><assinaturaQRCODE>QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=</assinaturaQRCODE><numeroCaixa>001</numeroCaixa></ide>
+<emit><CNPJ>11111111000191</CNPJ><xNome>EMPRESA DE TESTE LTDA</xNome><xFant>LOJA TESTE</xFant><enderEmit><xLgr>RUA EXEMPLO</xLgr><nro>100</nro><xBairro>CENTRO</xBairro><xMun>SAO PAULO</xMun><CEP>01001000</CEP></enderEmit><IE>111111111111</IE><cRegTrib>3</cRegTrib></emit>
+<dest><CPF>12345678909</CPF></dest>
+<det nItem="1"><prod><cProd>789100</cProd><xProd>CAFE TORRADO 500G</xProd><NCM>09012100</NCM><CFOP>5102</CFOP><uCom>UN</uCom><qCom>2.0000</qCom><vUnCom>18.90</vUnCom><vProd>37.80</vProd><indRegra>A</indRegra><vItem>37.80</vItem></prod><imposto><vItem12741>8.20</vItem12741></imposto></det>
+<det nItem="2"><prod><cProd>789200</cProd><xProd>LEITE INTEGRAL 1L</xProd><uCom>UN</uCom><qCom>6.0000</qCom><vUnCom>5.49</vUnCom><vProd>32.94</vProd><vDesc>2.94</vDesc><vItem>30.00</vItem></prod><imposto><vItem12741>4.10</vItem12741></imposto></det>
+<total><ICMSTot><vICMS>0.00</vICMS><vProd>70.74</vProd><vDesc>2.94</vDesc></ICMSTot><vCFe>67.80</vCFe><vCFeLei12741>12.30</vCFeLei12741></total>
+<pgto><MP><cMP>17</cMP><vMP>50.00</vMP></MP><MP><cMP>01</cMP><vMP>20.00</vMP></MP><vTroco>2.20</vTroco></pgto>
+<infAdic><infCpl>Obrigado pela preferência! Volte sempre.</infCpl></infAdic>
+</infCFe></CFe>

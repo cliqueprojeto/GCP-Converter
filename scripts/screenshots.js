@@ -57,6 +57,11 @@ fs.writeFileSync(f('Relatorio_Final.html'), '<h1>Relatório</h1><p>Texto</p>');
   await shot('06-ebooks');
   await click('.nav-item[data-route="compress"]');
   await shot('07-compactar');
+  // notas fiscais (XML fictício, sem dados reais)
+  fs.copyFileSync(path.join(__dirname, 'fixture-cfe-ficticio.xml'), f('Cupom_SAT_exemplo.xml'));
+  await send([f('Cupom_SAT_exemplo.xml')]);
+  await win.waitForTimeout(1200);
+  await shot('15-notas-fiscais');
   // fila com conversões em andamento
   await click('.nav-item[data-route="video"]');
   await win.waitForTimeout(500);

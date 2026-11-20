@@ -181,7 +181,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px;
 .stat span { color: var(--text-2); font-size: 12.5px; }
 .section-head { display: flex; align-items: center; justify-content: space-between; margin: 26px 0 14px; }
 .section-head h2 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
-.cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.cat-grid .cat-card:first-child { grid-column: span 1; }
 .cat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: 0; cursor: pointer; overflow: hidden; transition: transform .18s, border-color .18s, box-shadow .18s; display: flex; flex-direction: column; }
 .cat-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--c) 55%, var(--border)); box-shadow: 0 14px 34px color-mix(in srgb, var(--c) 18%, transparent); }
 .cat-art { height: 118px; position: relative; background: linear-gradient(135deg, color-mix(in srgb, var(--c) 30%, var(--panel-2)), color-mix(in srgb, var(--c) 8%, var(--panel))); display: grid; place-items: center; overflow: hidden; }
@@ -339,7 +340,8 @@ details.adv .opts { margin-top: 14px; }
 .eng-top small { color: var(--text-3); }
 .eng-state { margin-left: auto; font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
 .eng-state.ok { background: var(--success-soft); color: var(--success); }
-.eng-state.no { background: rgba(251, 191, 36, .12); color: var(--warning); }
+.eng-state.no, .eng-state.opt { background: var(--panel-3); color: var(--text-2); }
+.eng-note { color: var(--text-3); font-size: 12px; line-height: 1.5; }
 .eng code { font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 12px; background: var(--input); border: 1px solid var(--border); padding: 7px 10px; border-radius: 9px; display: flex; justify-content: space-between; align-items: center; gap: 10px; user-select: text; }
 .eng code button { background: none; border: none; color: var(--text-3); cursor: pointer; display: grid; }
 .about-hero { display: flex; gap: 22px; align-items: center; padding: 22px; background: linear-gradient(135deg, rgba(139,92,246,.14), rgba(236,72,153,.08) 50%, transparent), var(--panel); border: 1px solid var(--border); border-radius: 22px; margin-bottom: 18px; }
@@ -413,7 +415,7 @@ details.adv .opts { margin-top: 14px; }
 
 @media (max-width: 1240px) {
   .tool { grid-template-columns: minmax(0, 1fr) 380px; }
-  .cat-grid { grid-template-columns: repeat(2, 1fr); }
+  .cat-grid { grid-template-columns: repeat(3, 1fr); }
   .features { grid-template-columns: repeat(2, 1fr); }
   .hero { grid-template-columns: 1fr; }
   .h-row { grid-template-columns: 44px minmax(0, 2fr) 110px 120px auto; }

@@ -35,9 +35,10 @@ Tudo acontece **no seu computador**. Nenhum arquivo é enviado para a internet.
 |---|---|---|---|
 | 🎬 | **Vídeo** | MP4, MKV, WEBM, MOV, AVI, WMV, M4V, FLV, MPEG, 3GP, GIF, WEBP animado | H.264, H.265/HEVC, VP9 e AV1 · resolução, FPS e qualidade · cortar trecho · girar e espelhar · velocidade · aceleração por GPU (NVIDIA, Intel, AMD, Apple) |
 | 🎵 | **Áudio** | MP3, M4A/AAC, OGG, OPUS, FLAC, WAV, AIFF, ALAC, WMA, AC3, AMR | Extrai áudio de vídeos · normalização de volume (EBU R128) · fade in/out · remover silêncios · mantém a capa do álbum |
-| 🖼️ | **Imagem** | JPG, PNG, WEBP, AVIF, GIF, BMP, TIFF, ICO, PDF | Aceita SVG · redimensionar · qualidade · girar · preto e branco · reduzir paleta do PNG · remover metadados |
-| 📄 | **Documentos** | PDF, DOCX, ODT, RTF, TXT, HTML, Markdown, XLSX, ODS, CSV, PPTX, ODP | Markdown/HTML/TXT/DOCX → PDF embutido · imagens → PDF · unir vários arquivos em um único PDF |
-| 📚 | **E-books** | EPUB, MOBI, AZW3 (Kindle), FB2, PDF, DOCX, TXT, HTML | Gera EPUB 3 com sumário · título e autor nos metadados |
+| 🖼️ | **Imagem** | JPG, PNG, WEBP, AVIF, GIF, BMP, TIFF, ICO, PDF | Aceita SVG · **PDF → imagens (uma por página)** · redimensionar · qualidade · girar · preto e branco · reduzir paleta do PNG · remover metadados |
+| 📄 | **Documentos** | PDF, DOCX, ODT, RTF, TXT, HTML, Markdown, XLSX, ODS, CSV, PPTX, ODP, EPUB | **Motor do GCP-PDF embutido**: Word e Excel com layout fiel · PDF → Word, PowerPoint e Excel editáveis · XML de NF-e → DANFE · unir vários arquivos em um único PDF |
+| 📚 | **E-books** | EPUB, MOBI (Kindle), FB2, PDF, DOCX, ODT, RTF, TXT, HTML, Markdown | Lê MOBI, AZW, AZW3, FB2, CBZ, CBR e CB7 · gera EPUB 3 com sumário e MOBI para Kindle **sem Calibre** · título, autor e capa nos metadados |
+| 🧾 | **Notas fiscais** | PDF no leiaute oficial | XML → **DANFE** (NF-e), **DANFE NFC-e** (bobina 80 mm), **DANFSe v2.0** (NFS-e nacional), NFS-e ABRASF, **extrato do CF-e SAT** e CT-e · QR Code, código de barras e chave de acesso · em lote, com opção de unir tudo em um PDF |
 | 🗜️ | **Compactar** | Mesmo formato ou ZIP | 4 níveis: leve, recomendado, máximo e **tamanho exato em MB** · vídeos, áudios, imagens e PDFs · ZIP de vários arquivos |
 
 ### Conversão em lote
@@ -46,7 +47,7 @@ Tudo acontece **no seu computador**. Nenhum arquivo é enviado para a internet.
 - **Fila** com progresso em tempo real, velocidade de conversão, cancelar, tentar de novo e quanto espaço foi economizado.
 - **Conversões simultâneas** configuráveis (1 a 8).
 - **Destino**: mesma pasta do original ou uma pasta escolhida.
-- **Nome dos arquivos** com `{name}`, `{target}`, `{ext}`, `{date}`, `{time}` e `{index}`.
+- **Nome dos arquivos**: o nome original é preservado e ganha `_Convertido`, `_Compactado` ou `_Unido` no final (no idioma do app: `_Converted`/`_Compressed` em inglês, `_Convertido`/`_Comprimido` em espanhol). Exemplo: `Relatório.docx` → `Relatório_Convertido.pdf`. Também dá para personalizar com `{name}`, `{action}`, `{target}`, `{ext}`, `{date}`, `{time}` e `{index}`.
 - O arquivo original **nunca é sobrescrito**.
 
 ### Predefinições prontas
@@ -115,19 +116,26 @@ O GCP Converter ainda não usa certificados pagos de assinatura de código, por 
   ```
 </details>
 
-### Motores de conversão
+### Motores de conversão — tudo embutido
 
-O **FFmpeg** (vídeo, áudio e imagem) e o motor de documentos (Chromium, pdf-lib, mammoth, marked e JSZip) **já vêm dentro do aplicativo**. Motores opcionais do sistema ampliam os formatos de documentos e e-books, e são detectados automaticamente em **Configurações → Motores**:
+**Nada precisa ser instalado.** O GCP Converter já traz:
 
-| Motor | Para quê | Arch / BigLinux / Manjaro | Debian / Ubuntu | Fedora | macOS | Windows |
-|---|---|---|---|---|---|---|
-| LibreOffice | DOC/DOCX, ODT, RTF, planilhas e apresentações | `pacman -S libreoffice-fresh` | `apt install libreoffice` | `dnf install libreoffice` | `brew install --cask libreoffice` | `winget install TheDocumentFoundation.LibreOffice` |
-| Calibre | MOBI, AZW3, FB2 e demais e-books | `pacman -S calibre` | `apt install calibre` | `dnf install calibre` | `brew install --cask calibre` | `winget install calibre.calibre` |
-| Pandoc | Markdown, DOCX, ODT, RTF, EPUB | `pacman -S pandoc-cli` | `apt install pandoc` | `dnf install pandoc` | `brew install pandoc` | `winget install JohnMacFarlane.Pandoc` |
-| Ghostscript | Compactação forte de PDF | `pacman -S ghostscript` | `apt install ghostscript` | `dnf install ghostscript` | `brew install ghostscript` | `winget install ArtifexSoftware.GhostScript` |
-| Poppler | PDF → TXT/HTML | `pacman -S poppler` | `apt install poppler-utils` | `dnf install poppler-utils` | `brew install poppler` | `winget install oschwartz10612.Poppler` |
+| Motor | O que faz |
+|---|---|
+| **FFmpeg** | Vídeo, áudio e imagens |
+| **Motor de documentos do [GCP-PDF](https://github.com/cliqueprojeto/GCP-PDF)** | Word e Excel → PDF com layout de página fiel; PDF → Word, PowerPoint, Excel, EPUB e imagens com layout preservado; EPUB, quadrinhos e XML fiscal |
+| **Leitores e geradores próprios** | ODT, ODS, ODP, PPTX e RTF (títulos, listas, tabelas, imagens, cores, mesclagens, moeda, porcentagem, datas e layouts de slide) |
+| **Motor de e-books** | Lê MOBI, AZW, AZW3, FB2, CBZ, CBR e CB7; gera EPUB, MOBI (Kindle) e FB2 |
 
-Quando um formato precisa de um motor que não está instalado, o GCP Converter mostra um cadeado no formato e diz qual motor instalar.
+A conversão de documentos segue exatamente a ordem do GCP-PDF: **Microsoft Office** (Windows, se instalado) → **LibreOffice** (se instalado) → **motor interno**. Ou seja, quem já tem esses programas continua usando-os, e quem não tem converte normalmente.
+
+Programas **opcionais**, detectados automaticamente em **Configurações → Motores**:
+
+| Programa | Quando é útil |
+|---|---|
+| LibreOffice ou Microsoft Office | Formatos antigos do Office (`.doc`, `.xls`, `.ppt`) e máxima fidelidade em documentos do Office |
+| Calibre | Gerar AZW3 e ler formatos raros de e-book (KFX, LIT, LRF, PDB, DjVu) |
+| Ghostscript | Compactação mais forte de PDF |
 
 ## 🖼️ Telas
 
@@ -142,6 +150,8 @@ Quando um formato precisa de um motor que não está instalado, o GCP Converter 
 | <img src="docs/screenshots/08-fila.png" alt="Fila" /> | <img src="docs/screenshots/09-configuracoes.png" alt="Configurações" /> |
 | **Motores de conversão** | **Sobre, histórico de versões e licenças** |
 | <img src="docs/screenshots/10-motores.png" alt="Motores" /> | <img src="docs/screenshots/11-sobre.png" alt="Sobre" /> |
+| **Notas fiscais (XML → DANFE/DANFSe)** | **Documentos** |
+| <img src="docs/screenshots/15-notas-fiscais.png" alt="Notas fiscais" /> | <img src="docs/screenshots/05-documentos.png" alt="Documentos" /> |
 | **Apoie o projeto** | **Tema claro (inglês)** |
 | <img src="docs/screenshots/12-apoie.png" alt="Apoie" /> | <img src="docs/screenshots/13-light-en.png" alt="Tema claro" /> |
 
@@ -164,7 +174,9 @@ npm start
 |---|---|
 | `npm start` | Abre o aplicativo |
 | `npm run dev` | Abre com as ferramentas de desenvolvedor |
-| `npm test` | Teste ponta a ponta: converte arquivos reais em todas as categorias (Linux: `xvfb-run -a npm test`) |
+| `npm test` | Teste ponta a ponta de vídeo, áudio, imagem e compactação (Linux: `xvfb-run -a npm test`) |
+| `npm run test:docs` | Teste ponta a ponta de documentos e e-books, inclusive sem LibreOffice (`GCP_NO_EXTERNAL=1`) |
+| `npm run vendor:gcp-pdf` | Atualiza o motor de documentos a partir do repositório do GCP-PDF |
 | `npm run dist:linux` | Gera `.deb`, `.rpm`, `.pkg.tar.zst` e AppImage |
 | `npm run dist:win` | Gera o instalador do Windows |
 | `npm run dist:mac` | Gera o `.dmg` do macOS |
@@ -184,6 +196,8 @@ electron/            processo principal
   jobs.js            fila de conversão em lote
   updater.js         atualizações pelas Releases do GitHub
   engines/           FFmpeg, documentos/e-books e detecção de motores
+    gcp-pdf/         motor de documentos do GCP-PDF (gerado por scripts/vendor-gcp-pdf.js)
+    builtin/         leitores e geradores de ODT, ODS, ODP, PPTX, RTF, MOBI e FB2
 src/                 interface (HTML, CSS e JavaScript)
   shared/formats.js  catálogo de formatos e predefinições
   js/i18n.js         traduções (pt-BR, en, es)
@@ -227,7 +241,8 @@ Contribua com qualquer valor pelo checkout seguro do Stripe.
 ## 📄 Licenças
 
 - **GCP Converter:** [GNU General Public License v3.0](LICENSE) ou posterior.
-- **Componentes de terceiros** (FFmpeg, Electron, pdf-lib, mammoth, marked, JSZip, node-qrcode, Lucide, Inter): veja [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- **Motor de documentos do GCP-PDF:** GPL-3.0-or-later, do mesmo autor.
+- **Componentes de terceiros** (FFmpeg, Electron, PDF.js, pdf-lib, docx, ExcelJS, PptxGenJS, foliate-js, mammoth, marked, JSZip, Lucide, Inter e outros): veja [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 As marcas citadas (YouTube, Instagram, TikTok, WhatsApp, Kindle etc.) pertencem aos seus titulares e aparecem apenas como referência de compatibilidade.
 
@@ -240,7 +255,7 @@ As marcas citadas (YouTube, Instagram, TikTok, WhatsApp, Kindle etc.) pertencem 
 - **Video:** MP4, MKV, WEBM, MOV, AVI, WMV, M4V, FLV, MPEG, 3GP, GIF · H.264, H.265, VP9, AV1 · trim, resize, rotate, GPU acceleration.
 - **Audio:** MP3, M4A, OGG, OPUS, FLAC, WAV, AIFF, ALAC, WMA, AC3, AMR · extract audio from video · loudness normalization.
 - **Images:** JPG, PNG, WEBP, AVIF, GIF, BMP, TIFF, ICO, PDF · SVG input · resize and optimize.
-- **Documents and e-books:** PDF, DOCX, ODT, RTF, TXT, HTML, Markdown, spreadsheets, presentations, EPUB, MOBI, AZW3, FB2.
+- **Documents and e-books, fully built in (no LibreOffice or Calibre needed):** PDF, DOCX, ODT, RTF, TXT, HTML, Markdown, spreadsheets, presentations, EPUB, MOBI, FB2 — powered by the GCP-PDF engine.
 - **Compress** to a quality level or an **exact size in MB**, or bundle files into a ZIP.
 - Drag files or whole folders, parallel queue, presets for YouTube, Instagram, WhatsApp, Kindle and more.
 - Dark/light themes, Portuguese/English/Spanish with automatic system detection.
@@ -255,7 +270,7 @@ As marcas citadas (YouTube, Instagram, TikTok, WhatsApp, Kindle etc.) pertencem 
 - **Video:** MP4, MKV, WEBM, MOV, AVI, WMV, M4V, FLV, MPEG, 3GP, GIF · H.264, H.265, VP9, AV1 · recortar, redimensionar, girar, aceleración por GPU.
 - **Audio:** MP3, M4A, OGG, OPUS, FLAC, WAV, AIFF, ALAC, WMA, AC3, AMR · extraer audio de videos · normalización de volumen.
 - **Imágenes:** JPG, PNG, WEBP, AVIF, GIF, BMP, TIFF, ICO, PDF · entrada SVG · redimensionar y optimizar.
-- **Documentos y e-books:** PDF, DOCX, ODT, RTF, TXT, HTML, Markdown, hojas de cálculo, presentaciones, EPUB, MOBI, AZW3, FB2.
+- **Documentos y e-books, todo incluido (sin LibreOffice ni Calibre):** PDF, DOCX, ODT, RTF, TXT, HTML, Markdown, hojas de cálculo, presentaciones, EPUB, MOBI, FB2 — con el motor de GCP-PDF.
 - **Comprimir** por nivel de calidad o a un **tamaño exacto en MB**, o juntar archivos en un ZIP.
 - Arrastra archivos o carpetas, cola en paralelo, ajustes para YouTube, Instagram, WhatsApp, Kindle y más.
 - Temas oscuro/claro, portugués/inglés/español con detección automática del sistema.

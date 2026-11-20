@@ -68,6 +68,7 @@ class JobQueue extends EventEmitter {
       const t = findTarget(b.category, target);
       ext = t ? t.ext : target;
       if (b.category === 'image' && target === 'pdf') kind = 'document';
+      if (b.category === 'image' && inExt === 'pdf' && target !== 'pdf') kind = 'pdfimages';
     }
     const job = {
       id,
@@ -82,7 +83,7 @@ class JobQueue extends EventEmitter {
       ext,
       options: b.options || {},
       outputDir: b.outputDir || (s.outputMode === 'custom' && s.outputDir ? s.outputDir : path.dirname(b.input)),
-      namePattern: b.namePattern || s.namePattern || '{name}',
+      namePattern: b.namePattern || s.namePattern || '{name}_{action}',
       conflict: s.conflict,
       keepMetadata: b.options && b.options.keepMetadata !== undefined ? b.options.keepMetadata : s.keepMetadata,
       hwAccel: s.hwAccel,
@@ -142,6 +143,18 @@ class JobQueue extends EventEmitter {
       // Escreve em arquivo temporário e renomeia ao final (evita arquivos corrompidos)
       tmpOut = path.join(path.dirname(output), `.${path.basename(output, path.extname(output))}.${job.id}.gcp-part${path.extname(output)}`);
       if (path.resolve(output) === path.resolve(job.input)) job.inPlace = true;
+      if (job.kind === 'pdfimages') {
+        // PDF → uma imagem por página (nome-001.png, nome-002.png…)
+        const base = output.slice(0, -path.extname(output).length);
+        tmpOut = null;
+        const outs = await docs.pdfToImages(job.input, base, job.ext, job.options, onProgress, job.abort.signal);
+        job.outputs = outs;
+        job.output = outs[0];
+        job.sizeOut = outs.reduce((a, f) => a + fs.statSync(f).size, 0);
+        job.progress = 1;
+        job.status = 'done';
+        return;
+      }
       await this._execute(job, tmpOut, onProgress);
       if (job.abort.signal.aborted) throw Object.assign(new Error('cancelled'), { cancelled: true });
       await fsp.rm(output, { force: true });
@@ -204,7 +217,7 @@ class JobQueue extends EventEmitter {
       return;
     }
     if (job.kind === 'compress') return this._compress(job, out, onProgress, signal);
-    if (job.kind === 'document' || job.kind === 'ebook') return docs.convertDocument(job, out, onProgress, signal);
+    if (job.kind === 'document' || job.kind === 'ebook' || job.kind === 'fiscal') return docs.convertDocument(job, out, onProgress, signal);
     if (job.kind === 'image' && job.inExt === 'svg') {
       const png = await renderSvg(job.input, o);
       try {
@@ -310,14 +323,23 @@ function fmtDate(d = new Date()) {
 function resolveOutput(job, reserved = new Set()) {
   const base = job.kind === 'zip' ? (job.options.zipName || `GCP-Converter-${fmtDate().date}`) : path.basename(job.input, path.extname(job.input));
   const { date, time } = fmtDate();
-  let name = (job.kind === 'zip' ? base : job.namePattern)
+  // Sufixo que identifica o arquivo gerado pelo GCP Converter (o nome original é preservado)
+  const lang = String(job.lang || 'pt-BR').slice(0, 2);
+  const WORDS = { pt: { c: 'Convertido', z: 'Compactado', m: 'Unido' }, en: { c: 'Converted', z: 'Compressed', m: 'Merged' }, es: { c: 'Convertido', z: 'Comprimido', m: 'Unido' } }[lang] || { c: 'Convertido', z: 'Compactado', m: 'Unido' };
+  const action = job.kind === 'compress' || job.kind === 'zip' ? WORDS.z : job.kind === 'merge' ? WORDS.m : WORDS.c;
+  let pattern = job.kind === 'zip' ? '{name}_{action}' : job.namePattern || '{name}_{action}';
+  if (!pattern.includes('{action}')) pattern += '_{action}';
+  // não repete o sufixo em arquivos que já foram convertidos/compactados
+  const already = [WORDS.c, WORDS.z, WORDS.m, 'Convertido', 'Compactado', 'Converted', 'Compressed', 'Comprimido', 'Unido', 'Merged'].some((w) => new RegExp(`_${w}( \\(\\d+\\))?$`).test(base));
+  if (already) pattern = pattern.replace(/_?\{action\}/g, '');
+  let name = pattern
+    .replace(/\{action\}/g, action)
     .replace(/\{name\}/g, base)
     .replace(/\{ext\}/g, job.inExt)
     .replace(/\{target\}/g, job.ext)
     .replace(/\{date\}/g, date)
     .replace(/\{time\}/g, time)
     .replace(/\{index\}/g, String(job.index || 1).padStart(3, '0'));
-  if (job.kind === 'merge') name = `${base}_merged`;
   name = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim() || base;
   let out = path.join(job.outputDir, `${name}.${job.ext}`);
   // Nunca sobrescreve o próprio arquivo de entrada.

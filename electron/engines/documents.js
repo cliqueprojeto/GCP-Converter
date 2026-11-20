@@ -1,7 +1,12 @@
-// Conversão de documentos e e-books.
-// Motores embutidos: Chromium (HTML→PDF), mammoth (DOCX), marked (Markdown),
-// pdf-lib (PDF), JSZip (EPUB/ZIP). Motores opcionais do sistema: LibreOffice,
-// Calibre, Pandoc, Ghostscript e Poppler.
+// Conversão de documentos e e-books — tudo embutido, sem programas externos.
+//
+// Ordem de prioridade (igual ao GCP-PDF):
+//   • Documentos do Office → PDF: Microsoft Office (Windows, se instalado) → LibreOffice (se instalado)
+//     → motor interno do GCP-PDF (DOCX e XLSX com layout de página fiel).
+//   • PDF → DOCX / PPTX / XLSX / EPUB / PNG: motores de layout do GCP-PDF.
+// Formatos que o GCP-PDF só converte com programas externos (ODT, ODS, ODP, PPTX, RTF) ganham
+// leitores próprios em ./builtin, usados quando nem o Office nem o LibreOffice estão disponíveis.
+// Calibre só é usado para AZW3 e formatos raros de e-book (KFX, LIT, LRF, PDB, DjVu).
 'use strict';
 const fs = require('fs');
 const fsp = fs.promises;
@@ -11,317 +16,627 @@ const { spawn } = require('child_process');
 const { BrowserWindow } = require('electron');
 const { detect } = require('./tools');
 
-const OFFICE_IN = ['doc', 'docx', 'odt', 'rtf', 'txt', 'html', 'htm', 'xls', 'xlsx', 'ods', 'csv', 'ppt', 'pptx', 'odp', 'wpd', 'pages', 'key', 'numbers', 'md'];
-const OFFICE_OUT = {
-  text: ['pdf', 'docx', 'odt', 'rtf', 'txt', 'html'],
-  sheet: ['pdf', 'xlsx', 'ods', 'csv', 'html'],
-  slides: ['pdf', 'pptx', 'odp', 'html']
+let gcpPdf = null;
+const G = () => (gcpPdf ||= require('./gcp-pdf'));
+const B = {
+  odf: () => require('./builtin/odf'),
+  rtf: () => require('./builtin/rtf'),
+  slides: () => require('./builtin/slides'),
+  sheets: () => require('./builtin/sheets'),
+  ebooks: () => require('./builtin/ebooks')
 };
-const SHEET_IN = ['xls', 'xlsx', 'ods', 'csv', 'numbers'];
-const SLIDE_IN = ['ppt', 'pptx', 'odp', 'key'];
-const CALIBRE_IN = ['epub', 'mobi', 'azw', 'azw3', 'kfx', 'fb2', 'lit', 'pdb', 'lrf', 'cbz', 'cbr', 'cb7', 'djvu', 'pdf', 'docx', 'odt', 'rtf', 'txt', 'md', 'markdown', 'html', 'htm'];
-const CALIBRE_OUT = ['epub', 'mobi', 'azw3', 'fb2', 'pdf', 'docx', 'txt', 'html', 'rtf', 'htmlz', 'txtz', 'pdb', 'lrf', 'snb', 'tcr', 'oeb', 'pml', 'rb', 'odt'];
-const PANDOC_IN = ['md', 'markdown', 'html', 'htm', 'docx', 'odt', 'rtf', 'epub', 'txt', 'tex', 'rst', 'fb2'];
-const PANDOC_OUT = ['md', 'html', 'docx', 'odt', 'rtf', 'epub', 'txt', 'fb2'];
-const IMG_IN = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'];
-const BUILTIN_HTML_SOURCES = ['md', 'markdown', 'txt', 'html', 'htm', 'docx', 'epub'];
-const BUILTIN_HTML_TARGETS = ['pdf', 'html', 'txt', 'md', 'epub'];
 
-const LABEL = { builtin: 'GCP (embutido)', libreoffice: 'LibreOffice', calibre: 'Calibre', pandoc: 'Pandoc', ghostscript: 'Ghostscript', poppler: 'Poppler' };
+/* ------------------------------------------------------------------ */
+/* catálogo                                                            */
+/* ------------------------------------------------------------------ */
+
+const GCP_IN = ['docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp', 'doc', 'xls', 'ppt', 'rtf', 'txt', 'xml', 'png', 'jpg', 'jpeg', 'webp', 'bmp'];
+const LEGACY = ['doc', 'xls', 'ppt', 'wpd', 'pages', 'key', 'numbers'];
+const SHEET = ['xlsx', 'ods', 'csv'];
+const SLIDE = ['pptx', 'odp'];
+const READER = ['mobi', 'azw', 'azw3', 'fb2'];
+const COMIC = ['cbz', 'cbr', 'cb7'];
+const CALIBRE_ONLY_IN = ['kfx', 'lit', 'lrf', 'pdb', 'djvu'];
+const CALIBRE_ONLY_OUT = ['azw3'];
+const IMG = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'tif', 'tiff', 'avif'];
+
+const LABEL = { builtin: 'GCP (embutido)', libreoffice: 'LibreOffice', office: 'Microsoft Office ou LibreOffice', calibre: 'Calibre', ghostscript: 'Ghostscript' };
 
 /**
- * Decide qual motor usa para converter `inExt` em `outExt`.
- * Retorna { engine } ou { missing: [motores que resolveriam] }.
+ * Decide como converter `inExt` em `outExt`.
+ * Retorna { engine } ou { missing: [motores necessários] }.
  */
 function plan(inExt, outExt, tools, kind) {
-  inExt = inExt.toLowerCase();
+  inExt = String(inExt).toLowerCase();
   const has = (id) => tools[id] && tools[id].available;
   if (inExt === outExt || (inExt === 'htm' && outExt === 'html') || (inExt === 'markdown' && outExt === 'md')) return { engine: 'copy' };
-  const candidates = [];
-
-  // Imagens → PDF (pdf-lib)
-  if (IMG_IN.includes(inExt) && outExt === 'pdf') candidates.push('builtin');
-  // PDF → TXT/imagens (Poppler)
-  if (inExt === 'pdf' && ['txt', 'html'].includes(outExt)) candidates.push('poppler');
-  // Caminhos embutidos via HTML
-  if (BUILTIN_HTML_SOURCES.includes(inExt) && BUILTIN_HTML_TARGETS.includes(outExt)) {
-    // Para e-books preferimos Calibre quando instalado (melhor fidelidade)
-    if (kind === 'ebook' && has('calibre') && !['md'].includes(outExt)) candidates.push('calibre');
-    candidates.push('builtin');
+  if (CALIBRE_ONLY_OUT.includes(outExt) || CALIBRE_ONLY_IN.includes(inExt)) return has('calibre') ? { engine: 'calibre' } : { missing: ['calibre'] };
+  if (inExt === 'xml') return outExt === 'pdf' ? { engine: 'builtin' } : { unsupported: true };
+  if (LEGACY.includes(inExt)) {
+    // Igual ao GCP-PDF: Microsoft Office (Windows) ou LibreOffice
+    if (has('libreoffice') || process.platform === 'win32') return { engine: 'builtin' };
+    return { missing: ['office'] };
   }
-  // Escritório
-  const officeTargets = SHEET_IN.includes(inExt) ? OFFICE_OUT.sheet : SLIDE_IN.includes(inExt) ? OFFICE_OUT.slides : OFFICE_OUT.text;
-  if (OFFICE_IN.includes(inExt) && officeTargets.includes(outExt) && inExt !== 'md') candidates.push('libreoffice');
-  if (inExt === 'pdf' && ['docx', 'odt'].includes(outExt)) candidates.push('libreoffice');
-  // Markup
-  if (PANDOC_IN.includes(inExt) && PANDOC_OUT.includes(outExt)) candidates.push('pandoc');
-  // E-books
-  if (CALIBRE_IN.includes(inExt) && CALIBRE_OUT.includes(outExt)) candidates.push('calibre');
-  // Markdown → formatos de escritório: Pandoc ou (HTML intermediário + LibreOffice)
-  if (['md', 'markdown', 'epub'].includes(inExt) && ['docx', 'odt', 'rtf'].includes(outExt)) candidates.push('builtin+libreoffice');
-
-  const unique = [...new Set(candidates)];
-  for (const c of unique) {
-    if (c === 'builtin') return { engine: 'builtin' };
-    if (c === 'builtin+libreoffice' && has('libreoffice')) return { engine: c };
-    if (has(c)) return { engine: c };
-  }
-  const missing = unique.filter((c) => c !== 'builtin').map((c) => c.replace('builtin+', ''));
-  return { missing: [...new Set(missing)] };
+  return { engine: 'builtin' };
 }
 
 /* ------------------------------------------------------------------ */
 /* utilidades                                                          */
 /* ------------------------------------------------------------------ */
 
-function run(bin, args, { signal, cwd, timeout = 30 * 60 * 1000 } = {}) {
+function run(bin, args, { signal, timeout = 30 * 60 * 1000 } = {}) {
   return new Promise((resolve, reject) => {
-    const p = spawn(bin, args, { cwd, windowsHide: true });
-    let out = '';
+    const p = spawn(bin, args, { windowsHide: true });
     let err = '';
     const kill = () => { try { p.kill('SIGKILL'); } catch {} };
     const timer = setTimeout(kill, timeout);
     if (signal) signal.addEventListener('abort', kill, { once: true });
-    p.stdout.on('data', (d) => (out = (out + d).slice(-20000)));
+    p.stdout.on('data', () => {});
     p.stderr.on('data', (d) => (err = (err + d).slice(-8000)));
     p.on('error', (e) => { clearTimeout(timer); reject(e); });
     p.on('close', (code) => {
       clearTimeout(timer);
       if (signal && signal.aborted) return reject(Object.assign(new Error('cancelled'), { cancelled: true }));
-      if (code === 0) resolve({ out, err });
-      else reject(new Error((err || out).trim().split(/\r?\n/).slice(-3).join(' · ') || `código ${code}`));
+      code === 0 ? resolve() : reject(new Error(err.trim().split(/\r?\n/).slice(-3).join(' · ') || `código ${code}`));
     });
   });
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const cancelled = (signal) => { if (signal && signal.aborted) throw Object.assign(new Error('cancelled'), { cancelled: true }); };
 
 const DOC_CSS = `
-  @page { margin: 18mm 16mm; }
-  html { -webkit-print-color-adjust: exact; }
-  body { font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 11.5pt; line-height: 1.6; color: #1b2235; max-width: 900px; margin: 0 auto; padding: 24px; }
-  h1, h2, h3, h4 { color: #0f172a; line-height: 1.25; margin: 1.4em 0 .5em; }
-  h1 { font-size: 24pt; border-bottom: 3px solid #8b5cf6; padding-bottom: .2em; }
-  h2 { font-size: 17pt; } h3 { font-size: 14pt; }
-  a { color: #7c3aed; }
+  @page { size: A4; margin: 20mm 18mm; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: Calibri, Carlito, "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; margin: 0; }
+  h1, h2, h3, h4 { line-height: 1.25; margin: 1.2em 0 .45em; page-break-after: avoid; }
+  h1 { font-size: 22pt; } h2 { font-size: 16pt; } h3 { font-size: 13.5pt; }
   img { max-width: 100%; height: auto; }
-  pre { background: #f4f5fb; padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 9.5pt; white-space: pre-wrap; }
-  code { font-family: "JetBrains Mono", Consolas, monospace; background: #f4f5fb; padding: 1px 4px; border-radius: 4px; }
-  pre code { background: none; padding: 0; }
-  blockquote { border-left: 4px solid #c4b5fd; margin: 1em 0; padding: .2em 1em; color: #475069; background: #faf8ff; }
-  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 10pt; }
-  th, td { border: 1px solid #d9dcea; padding: 6px 8px; text-align: left; vertical-align: top; }
-  th { background: #f1effc; }
-  hr { border: none; border-top: 1px solid #d9dcea; margin: 2em 0; }
-  .txt { white-space: pre-wrap; font-family: "JetBrains Mono", Consolas, monospace; font-size: 10pt; }
+  pre { background: #f4f5f7; padding: 10px 12px; border-radius: 6px; font-size: 9.5pt; white-space: pre-wrap; }
+  code { font-family: Consolas, "Liberation Mono", monospace; }
+  blockquote { border-left: 4px solid #c9cdd8; margin: 1em 0; padding: .2em 1em; color: #444; }
+  table { border-collapse: collapse; width: 100%; margin: .8em 0; font-size: 10pt; page-break-inside: auto; }
+  th, td { border: 1px solid #c8ccd8; padding: 4px 7px; text-align: left; vertical-align: top; }
+  th { background: #f1f2f6; }
+  hr.pagebreak { border: 0; page-break-after: always; break-after: page; }
 `;
 
-function wrapHtml(body, title, extraCss = '') {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${DOC_CSS}${extraCss}</style></head><body>${body}</body></html>`;
+function wrapHtml(body, title, css = '', pageCss = '') {
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(title || '')}</title><style>${DOC_CSS}${pageCss}${css}</style></head><body>${body}</body></html>`;
 }
 
-/** Lê qualquer fonte suportada e retorna { html (corpo), title }. */
-async function sourceToHtml(input, inExt) {
-  const title = path.basename(input, path.extname(input));
-  if (inExt === 'md' || inExt === 'markdown') {
-    const { marked } = require('marked');
-    const md = await fsp.readFile(input, 'utf8');
-    return { html: marked.parse(md, { gfm: true }), title, baseDir: path.dirname(input) };
-  }
-  if (inExt === 'txt') {
-    const txt = await fsp.readFile(input, 'utf8');
-    return { html: `<div class="txt">${escapeHtml(txt)}</div>`, title, plain: txt };
-  }
-  if (inExt === 'html' || inExt === 'htm') {
-    const raw = await fsp.readFile(input, 'utf8');
-    const m = raw.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-    const styles = (raw.match(/<style[\s\S]*?<\/style>/gi) || []).join('');
-    return { html: styles + (m ? m[1] : raw), title: (raw.match(/<title>([^<]*)<\/title>/i) || [])[1] || title, baseDir: path.dirname(input), full: raw };
-  }
-  if (inExt === 'docx') {
-    const mammoth = require('mammoth');
-    const res = await mammoth.convertToHtml({ path: input });
-    return { html: res.value, title };
-  }
-  if (inExt === 'epub') return epubToHtml(input);
-  throw new Error(`Formato de origem não suportado: ${inExt}`);
+function pageCssFor(o = {}) {
+  const size = o.pageSize && o.pageSize !== 'A4' && o.pageSize !== 'fit' ? o.pageSize : 'A4';
+  return o.orientation === 'landscape' || size !== 'A4' ? `@page { size: ${size}${o.orientation === 'landscape' ? ' landscape' : ''}; }` : '';
 }
 
-async function epubToHtml(input) {
-  const JSZip = require('jszip');
-  const zip = await JSZip.loadAsync(await fsp.readFile(input));
-  const container = await zip.file('META-INF/container.xml').async('string');
-  const opfPath = container.match(/full-path="([^"]+)"/)[1];
-  const opfDir = path.posix.dirname(opfPath);
-  const opf = await zip.file(opfPath).async('string');
-  const title = ((opf.match(/<dc:title[^>]*>([^<]+)</) || [])[1] || path.basename(input, '.epub')).trim();
-  const manifest = {};
-  for (const m of opf.matchAll(/<item\b([^>]*)\/?>/g)) {
-    const id = (m[1].match(/\bid="([^"]+)"/) || [])[1];
-    const href = (m[1].match(/\bhref="([^"]+)"/) || [])[1];
-    const type = (m[1].match(/media-type="([^"]+)"/) || [])[1];
-    if (id && href) manifest[id] = { href: decodeURIComponent(href), type };
-  }
-  const spine = [...opf.matchAll(/<itemref[^>]*idref="([^"]+)"/g)].map((m) => m[1]);
-  const join = (base, rel) => path.posix.normalize(path.posix.join(base, rel));
-  const parts = [];
-  for (const id of spine) {
-    const item = manifest[id];
-    if (!item) continue;
-    const full = join(opfDir, item.href);
-    const f = zip.file(full);
-    if (!f) continue;
-    let html = await f.async('string');
-    const body = (html.match(/<body[^>]*>([\s\S]*)<\/body>/i) || [])[1] || html;
-    // Embute imagens como data URI
-    const dir = path.posix.dirname(full);
-    const replaced = [];
-    for (const im of body.matchAll(/(?:src|xlink:href|href)="([^"]+\.(?:png|jpe?g|gif|svg|webp))"/gi)) {
-      const imgPath = join(dir, decodeURIComponent(im[1]));
-      const imgFile = zip.file(imgPath);
-      if (imgFile) {
-        const b64 = await imgFile.async('base64');
-        const ext = path.extname(imgPath).slice(1).toLowerCase().replace('jpg', 'jpeg').replace('svg', 'svg+xml');
-        replaced.push([im[1], `data:image/${ext};base64,${b64}`]);
-      }
-    }
-    let out = body;
-    for (const [a, b] of replaced) out = out.split(`"${a}"`).join(`"${b}"`);
-    parts.push(`<section class="chapter">${out}</section>`);
-  }
-  return { html: parts.join('\n<hr/>\n'), title };
-}
-
-/** Abre HTML em janela oculta do Chromium para extrair texto, XHTML ou gerar PDF. */
-async function withHiddenPage(fullHtml, baseDir, fn) {
-  const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'gcp-doc-'));
-  const file = path.join(baseDir && fs.existsSync(baseDir) ? baseDir : tmpDir, `.gcp-render-${process.pid}-${Date.now()}.html`);
-  let writtenFile = file;
+/** HTML → PDF com o Chromium (mesma configuração do GCP-PDF: janela oculta, sem scripts). */
+async function htmlToPdf(html, options = {}) {
+  const folder = await fsp.mkdtemp(path.join(os.tmpdir(), 'gcp-conv-html-'));
+  const file = path.join(folder, 'documento.html');
+  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false } });
   try {
-    await fsp.writeFile(file, fullHtml, 'utf8');
-  } catch {
-    writtenFile = path.join(tmpDir, 'render.html');
-    await fsp.writeFile(writtenFile, fullHtml, 'utf8');
+    await fsp.writeFile(file, html, { mode: 0o600 });
+    await win.loadFile(file);
+    const headerFooter = !!(options.headerTemplate || options.footerTemplate);
+    return new Uint8Array(await win.webContents.printToPDF({ pageSize: 'A4', printBackground: true, preferCSSPageSize: true, generateDocumentOutline: true, displayHeaderFooter: headerFooter, headerTemplate: options.headerTemplate || '<span></span>', footerTemplate: options.footerTemplate || '<span></span>' }));
+  } finally {
+    win.destroy();
+    fsp.rm(folder, { recursive: true, force: true }).catch(() => {});
   }
-  const win = new BrowserWindow({ show: false, width: 1000, height: 1400, webPreferences: { offscreen: false, javascript: true, sandbox: true } });
+}
+
+/** HTML → PDF com tamanho de página próprio (bobina 80 mm de NFC-e e CF-e SAT). */
+async function htmlToPdfSized(html, widthMm, heightMm) {
+  const folder = await fsp.mkdtemp(path.join(os.tmpdir(), 'gcp-conv-html-'));
+  const file = path.join(folder, 'documento.html');
+  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false } });
   try {
-    await win.loadFile(writtenFile);
-    await new Promise((r) => setTimeout(r, 150));
+    await fsp.writeFile(file, html, { mode: 0o600 });
+    await win.loadFile(file);
+    return new Uint8Array(await win.webContents.printToPDF({ pageSize: { width: widthMm / 25.4, height: Math.max(40, heightMm) / 25.4 }, printBackground: true, preferCSSPageSize: true, margins: { marginType: 'none' } }));
+  } finally {
+    win.destroy();
+    fsp.rm(folder, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/** XML fiscal → PDF no leiaute oficial (DANFE, DANFE NFC-e, DANFSe, extrato CF-e SAT, DACTE…). */
+async function fiscalToPdf(input) {
+  const bytes = new Uint8Array(await fsp.readFile(input));
+  const F = require('./builtin/fiscal');
+  const root = F.parse(bytes);
+  const kind = root && F.kindOf(root);
+  if (kind === 'nfse-nacional') return htmlToPdf(await F.danfseV2(root));
+  if (kind === 'cfe') { const { html, height } = await F.extratoCfe(root); return htmlToPdfSized(html, 80, height); }
+  if (kind === 'nfce') { const { html, height } = await F.danfeNfce(root); return htmlToPdfSized(html, 80, height); }
+  return (await G().fiscalXmlToPdf(bytes, htmlToPdf, htmlToPdfSized)).bytes;
+}
+
+/** Abre HTML numa janela oculta com scripts (para analisar o documento). */
+async function withPage(html, fn, { webSecurity = true, file: pageFile } = {}) {
+  let folder = null;
+  let file = pageFile;
+  if (!file) {
+    folder = await fsp.mkdtemp(path.join(os.tmpdir(), 'gcp-conv-page-'));
+    file = path.join(folder, 'page.html');
+    await fsp.writeFile(file, html, 'utf8');
+  }
+  const win = new BrowserWindow({ show: false, width: 1000, height: 1400, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity } });
+  try {
+    await win.loadFile(file);
     return await fn(win);
   } finally {
     win.destroy();
-    fsp.rm(writtenFile, { force: true }).catch(() => {});
-    fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    if (folder) fsp.rm(folder, { recursive: true, force: true }).catch(() => {});
   }
 }
 
-async function htmlToPdf(fullHtml, baseDir, output, opts = {}) {
-  await withHiddenPage(fullHtml, baseDir, async (win) => {
-    const data = await win.webContents.printToPDF({
-      pageSize: opts.pageSize || 'A4',
-      landscape: opts.orientation === 'landscape',
-      printBackground: true,
-      margins: { marginType: 'default' },
-      generateDocumentOutline: true
-    });
-    await fsp.writeFile(output, data);
-  });
+const BLOCKS_JS = () => fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'engine', 'blocks.js'), 'utf8');
+async function htmlToBlocks(fullHtml) {
+  return withPage(fullHtml, (win) => win.webContents.executeJavaScript(BLOCKS_JS()));
 }
-
 async function htmlToText(fullHtml) {
-  return withHiddenPage(fullHtml, null, (win) => win.webContents.executeJavaScript('document.body.innerText'));
+  return withPage(fullHtml, (win) => win.webContents.executeJavaScript('document.body.innerText'));
 }
-
 async function htmlToXhtml(fullHtml) {
-  return withHiddenPage(fullHtml, null, (win) =>
-    win.webContents.executeJavaScript(`(function(){
-      document.querySelectorAll('script').forEach(s=>s.remove());
-      return new XMLSerializer().serializeToString(document.body);
-    })()`)
-  );
+  return withPage(fullHtml, (win) => win.webContents.executeJavaScript(`(function(){document.querySelectorAll('script').forEach(s=>s.remove());return new XMLSerializer().serializeToString(document.body);})()`));
 }
 
-function htmlToMarkdownBasic(html) {
-  // Conversão simples (sem dependências) — Pandoc é usado quando disponível.
-  return html
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '')
-    .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_, n, t) => `\n${'#'.repeat(+n)} ${t.replace(/<[^>]+>/g, '').trim()}\n\n`)
-    .replace(/<(strong|b)[^>]*>([\s\S]*?)<\/\1>/gi, '**$2**')
-    .replace(/<(em|i)[^>]*>([\s\S]*?)<\/\1>/gi, '*$2*')
-    .replace(/<a [^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)')
-    .replace(/<img [^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*>/gi, '![$2]($1)')
-    .replace(/<img [^>]*src="([^"]*)"[^>]*>/gi, '![]($1)')
-    .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '- $1\n')
-    .replace(/<br\s*\/?>/gi, '  \n')
-    .replace(/<\/(p|div|ul|ol|table|tr|blockquote|section)>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim() + '\n';
+/** Lê MOBI, AZW, AZW3 e FB2 com o leitor embutido (foliate-js no Chromium). */
+async function readWithFoliate(input, kind) {
+  const page = path.join(__dirname, '..', '..', 'src', 'engine', 'reader.html');
+  return withPage(null, async (win) => {
+    for (let i = 0; i < 100; i++) {
+      if (await win.webContents.executeJavaScript('!!window.gcpReady')) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    const url = require('url').pathToFileURL(input).href;
+    const r = await win.webContents.executeJavaScript(`window.gcpReadBook(${JSON.stringify(url)}, ${JSON.stringify(kind)})`);
+    if (!r.ok) throw new Error(r.error);
+    return r;
+  }, { webSecurity: false, file: page });
 }
 
-/** Gera um EPUB 3 a partir de um corpo XHTML. */
-async function buildEpub(xhtmlBody, title, output, lang = 'pt-BR') {
+/** Troca imagens locais por data URIs (Markdown/HTML com imagens relativas). */
+async function inlineLocalImages(html, baseDir) {
+  if (!baseDir) return html;
+  const re = /(<img\b[^>]*\bsrc=")([^"]+)(")/gi;
+  const parts = [];
+  let last = 0;
+  for (const m of html.matchAll(re)) {
+    parts.push(html.slice(last, m.index));
+    let src = m[2];
+    if (!/^(data:|https?:)/i.test(src)) {
+      try {
+        const p = src.startsWith('file:') ? require('url').fileURLToPath(src) : path.resolve(baseDir, decodeURIComponent(src));
+        const ext = path.extname(p).slice(1).toLowerCase().replace('jpg', 'jpeg').replace('svg', 'svg+xml');
+        src = `data:image/${ext};base64,${(await fsp.readFile(p)).toString('base64')}`;
+      } catch {}
+    }
+    parts.push(m[1] + src + m[3]);
+    last = m.index + m[0].length;
+  }
+  parts.push(html.slice(last));
+  return parts.join('');
+}
+
+/* ------------------------------------------------------------------ */
+/* leitores                                                            */
+/* ------------------------------------------------------------------ */
+
+/** Conteúdo "semântico" (títulos, parágrafos, listas, tabelas) em HTML. */
+async function semantic(input, inExt, signal) {
+  const title = path.basename(input, path.extname(input));
+  const read = (enc) => fsp.readFile(input, enc);
+  switch (inExt) {
+    case 'md': case 'markdown': {
+      const { marked } = require('marked');
+      return { html: await inlineLocalImages(marked.parse(await read('utf8'), { gfm: true }), path.dirname(input)), title };
+    }
+    case 'txt': {
+      const txt = (await read('utf8')).replace(/\r\n?/g, '\n');
+      return { html: txt.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('\n'), title, plain: txt };
+    }
+    case 'html': case 'htm': case 'xhtml': {
+      const raw = await read('utf8');
+      const body = (raw.match(/<body[^>]*>([\s\S]*)<\/body>/i) || [])[1] || raw;
+      const styles = (raw.match(/<style[\s\S]*?<\/style>/gi) || []).join('');
+      return { html: await inlineLocalImages(body, path.dirname(input)), css: styles.replace(/<\/?style[^>]*>/gi, ''), title: (raw.match(/<title>([^<]*)<\/title>/i) || [])[1] || title };
+    }
+    case 'docx': {
+      const mammoth = require('mammoth');
+      return { html: (await mammoth.convertToHtml({ path: input })).value, title };
+    }
+    case 'odt': return { ...B.odf().readOdt(input), title };
+    case 'rtf': return { ...B.rtf().readRtf(await read('latin1')), title };
+    case 'epub': {
+      const b = G().readEpubBook(new Uint8Array(await read()));
+      return { html: b.html, css: b.css, title: b.title || title, author: b.author, lang: b.language, cover: b.cover };
+    }
+    case 'mobi': case 'azw': case 'azw3': case 'fb2': {
+      const b = await readWithFoliate(input, inExt === 'fb2' ? 'fb2' : 'mobi');
+      return { html: b.html, title: b.title || title, author: b.author, lang: b.lang, cover: b.cover };
+    }
+    case 'pptx': case 'odp': {
+      const deck = await readSlides(input, inExt);
+      const html = deck.slides.map((s, i) => {
+        const texts = s.items.filter((it) => it.type === 'text');
+        const head = texts.find((t) => t.title) || texts[0];
+        const body = texts.filter((t) => t !== head).map((t) => t.paras.map((p) => `<p>${p.runs.map((r) => (r.br ? '<br>' : esc(r.text || ''))).join('')}</p>`).join('')).join('');
+        const imgs = s.items.filter((it) => it.type === 'img').map((it) => `<p><img src="${it.src}"></p>`).join('');
+        const h = head ? head.paras.map((p) => p.runs.map((r) => esc(r.text || '')).join('')).join(' ') : `Slide ${i + 1}`;
+        return `<h2>${h}</h2>${body}${imgs}`;
+      }).join('\n');
+      return { html, title };
+    }
+    case 'xlsx': case 'ods': case 'csv': {
+      const sheets = await B.sheets().readSheets(input, inExt);
+      const full = B.sheets().sheetsToHtml(sheets, title);
+      return { html: (full.match(/<body>([\s\S]*)<\/body>/) || [])[1] || '', title };
+    }
+    case 'pdf': {
+      // PDF → DOCX com o motor de layout do GCP-PDF → HTML estruturado
+      const r = await G().convertPdf(new Uint8Array(await read()), { format: 'docx' });
+      const mammoth = require('mammoth');
+      return { html: (await mammoth.convertToHtml({ buffer: Buffer.from(r.bytes) })).value, title };
+    }
+    default:
+      if (COMIC.includes(inExt)) {
+        const c = await G().readComic(new Uint8Array(await read()), path.basename(input));
+        return { html: c.pages.map((p) => `<p><img src="data:${p.type};base64,${Buffer.from(p.data).toString('base64')}"></p>`).join(''), title: c.title || title, cover: c.pages[0] ? `data:${c.pages[0].type};base64,${Buffer.from(c.pages[0].data).toString('base64')}` : '' };
+      }
+      if (IMG.includes(inExt)) {
+        const png = await imageToPng(input);
+        return { html: `<p><img src="data:image/png;base64,${(await fsp.readFile(png)).toString('base64')}"></p>`, title };
+      }
+      throw new Error(`UNSUPPORTED:${inExt}`);
+  }
+}
+
+async function readSlides(input, inExt) {
+  return inExt === 'odp' ? B.odf().readOdp(input) : B.slides().readPptx(input);
+}
+
+async function imageToPng(input) {
+  const { runFfmpeg } = require('./media');
+  const out = path.join(os.tmpdir(), `gcp-img-${Date.now()}-${Math.random().toString(36).slice(2)}.png`);
+  await runFfmpeg({ input, output: out, args: ['-frames:v', '1'] });
+  return out;
+}
+
+async function tmpFile(ext) {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'gcp-conv-'));
+  return path.join(dir, `arquivo.${ext}`);
+}
+
+/** Qualquer formato → PDF (bytes). */
+async function toPdf(input, inExt, o = {}, signal) {
+  const g = G();
+  if (inExt === 'pdf') return new Uint8Array(await fsp.readFile(input));
+  if (inExt === 'xml') return fiscalToPdf(input);
+  // Mesma cadeia do GCP-PDF: Office (Windows) → LibreOffice → motor interno (DOCX/XLSX/TXT/imagens)
+  if (GCP_IN.includes(inExt)) {
+    try {
+      const r = await g.readInputDocument(input, htmlToPdf);
+      return r.bytes;
+    } catch (e) {
+      cancelled(signal);
+      // Formatos que o GCP-PDF só converte com Office/LibreOffice: leitores próprios
+      if (inExt === 'odt' || inExt === 'rtf') {
+        const s = await semantic(input, inExt, signal);
+        return htmlToPdf(wrapHtml(s.html, s.title, s.css, pageCssFor(o)));
+      }
+      if (SLIDE.includes(inExt)) return htmlToPdf(B.slides().slidesToHtml(await readSlides(input, inExt)));
+      if (inExt === 'ods') {
+        const tmp = await tmpFile('xlsx');
+        await B.sheets().writeXlsx(await B.sheets().readSheets(input, 'ods'), tmp);
+        try { return await toPdf(tmp, 'xlsx', o, signal); } finally { fsp.rm(path.dirname(tmp), { recursive: true, force: true }).catch(() => {}); }
+      }
+      throw e;
+    }
+  }
+  if (inExt === 'csv') {
+    const tmp = await tmpFile('xlsx');
+    await B.sheets().writeXlsx(await B.sheets().readSheets(input, 'csv'), tmp);
+    try { return await toPdf(tmp, 'xlsx', o, signal); } finally { fsp.rm(path.dirname(tmp), { recursive: true, force: true }).catch(() => {}); }
+  }
+  if (inExt === 'html' || inExt === 'htm') {
+    const raw = await fsp.readFile(input, 'utf8');
+    if (/<html[\s>]/i.test(raw)) return htmlToPdf(await inlineLocalImages(raw, path.dirname(input)));
+  }
+  if (inExt === 'epub') {
+    const b = G().readEpubBook(new Uint8Array(await fsp.readFile(input)));
+    return htmlToPdf(wrapHtml(b.html, b.title, `${b.css}\nbody{line-height:1.5}`, pageCssFor(o)));
+  }
+  if (COMIC.includes(inExt)) {
+    const c = await g.readComic(new Uint8Array(await fsp.readFile(input)), path.basename(input));
+    const { PDFDocument } = require('pdf-lib');
+    const pdf = await PDFDocument.create();
+    for (const p of c.pages) {
+      cancelled(signal);
+      let bytes = p.data;
+      let img;
+      try { img = /png/.test(p.type) ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes); } catch {
+        const { nativeImage } = require('electron');
+        img = await pdf.embedPng(nativeImage.createFromBuffer(Buffer.from(bytes)).toPNG());
+      }
+      pdf.addPage([img.width, img.height]).drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+    }
+    return pdf.save();
+  }
+  if (IMG.includes(inExt)) {
+    const png = await imageToPng(input);
+    try { return (await g.readInputDocument(png, htmlToPdf)).bytes; } finally { fsp.rm(png, { force: true }).catch(() => {}); }
+  }
+  const s = await semantic(input, inExt, signal);
+  return htmlToPdf(wrapHtml(s.html, s.title, s.css, pageCssFor(o)));
+}
+
+/* ------------------------------------------------------------------ */
+/* entrada principal                                                   */
+/* ------------------------------------------------------------------ */
+
+async function convertDocument(job, output, onProgress, signal) {
+  const tools = await detect();
+  const inExt = path.extname(job.input).slice(1).toLowerCase();
+  const out = job.ext;
+  const o = job.options || {};
+  const p = plan(inExt, out, tools, job.kind);
+  if (p.unsupported) throw new Error(`UNSUPPORTED:${inExt}→${out}`);
+  if (!p.engine) {
+    const names = (p.missing || []).map((m) => LABEL[m] || m).join(' ou ');
+    const err = new Error(`MISSING_ENGINE:${names}`);
+    err.missing = p.missing;
+    throw err;
+  }
+  job.engine = p.engine;
+  const progress = (v) => onProgress && onProgress(v);
+  progress(0.05);
+  const g = G();
+  const write = (bytes) => fsp.writeFile(output, Buffer.from(bytes));
+  const title = o.title || path.basename(job.input, path.extname(job.input));
+
+  if (p.engine === 'copy') return fsp.copyFile(job.input, output);
+  if (p.engine === 'calibre') return viaCalibre(tools.calibre.path, job.input, output, o, signal, onProgress);
+
+  // ---- PDF
+  if (out === 'pdf') {
+    if (IMG.includes(inExt) && (o.pageSize === 'fit' || o.pageSize === 'Letter' || o.orientation === 'portrait' || o.orientation === 'landscape')) return imagesToPdf([job.input], output, o);
+    return write(await toPdf(job.input, inExt, o, signal));
+  }
+
+  // ---- Office (motores de layout do GCP-PDF)
+  if (out === 'xlsx' && SHEET.includes(inExt)) return B.sheets().writeXlsx(await B.sheets().readSheets(job.input, inExt), output);
+  if (out === 'pptx' && inExt === 'odp') return B.slides().writePptx(await readSlides(job.input, inExt), output, title);
+  if (['docx', 'pptx', 'xlsx'].includes(out)) {
+    const pdf = await toPdf(job.input, inExt, o, signal);
+    progress(0.5);
+    cancelled(signal);
+    const r = await g.convertPdf(pdf, { format: out }, () => progress(0.75));
+    return write(r.bytes);
+  }
+
+  // ---- Texto
+  if (out === 'txt') {
+    if (inExt === 'pdf') return fsp.writeFile(output, await pdfText(job.input), 'utf8');
+    if (inExt === 'docx') return fsp.writeFile(output, (await require('mammoth').extractRawText({ path: job.input })).value, 'utf8');
+    if (SHEET.includes(inExt)) {
+      const sheets = await B.sheets().readSheets(job.input, inExt);
+      return fsp.writeFile(output, sheets.map((s) => s.rows.map((r) => r.map((v) => (v == null ? '' : v instanceof Date ? v.toISOString().slice(0, 10) : v)).join('\t')).join('\n')).join('\n\n'), 'utf8');
+    }
+    const s = await semantic(job.input, inExt, signal);
+    return fsp.writeFile(output, s.plain != null ? s.plain : await htmlToText(wrapHtml(s.html, s.title)), 'utf8');
+  }
+
+  // ---- HTML (com o layout do documento original quando possível)
+  if (out === 'html') {
+    if (inExt === 'docx') return fsp.writeFile(output, g.docxToHtml(new Uint8Array(await fsp.readFile(job.input))).html, 'utf8');
+    if (inExt === 'xlsx') return fsp.writeFile(output, await g.xlsxToHtml(new Uint8Array(await fsp.readFile(job.input))), 'utf8');
+    if (inExt === 'ods' || inExt === 'csv') return fsp.writeFile(output, B.sheets().sheetsToHtml(await B.sheets().readSheets(job.input, inExt), title), 'utf8');
+    if (SLIDE.includes(inExt)) return fsp.writeFile(output, B.slides().slidesToHtml(await readSlides(job.input, inExt)), 'utf8');
+    const s = await semantic(job.input, inExt, signal);
+    return fsp.writeFile(output, wrapHtml(s.html, s.title, s.css), 'utf8');
+  }
+
+  // ---- Markdown
+  if (out === 'md') {
+    const s = await semantic(job.input, inExt, signal);
+    const TurndownService = require('turndown');
+    const { gfm } = require('turndown-plugin-gfm');
+    const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
+    td.use(gfm);
+    return fsp.writeFile(output, td.turndown(s.html) + '\n', 'utf8');
+  }
+
+  // ---- EPUB
+  if (out === 'epub') {
+    // PDF e documentos com layout de página: motor de EPUB do GCP-PDF (refluxo a partir do PDF)
+    if (inExt === 'pdf' || ['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'odp'].includes(inExt)) {
+      const pdf = await toPdf(job.input, inExt, o, signal);
+      progress(0.4);
+      const analysis = await g.analyzeEpub(pdf);
+      const bytes = await g.toEpub(pdf, { title: o.title || analysis.title || title, author: o.author || analysis.author || '', language: ['pt-BR', 'en', 'es'].includes(job.lang) ? job.lang : 'pt-BR', chapters: analysis.chapters });
+      return write(bytes);
+    }
+    const s = await semantic(job.input, inExt, signal);
+    progress(0.5);
+    const xhtml = await htmlToXhtml(wrapHtml(s.html, s.title, s.css));
+    return buildEpub(xhtml, o.title || s.title, output, s.lang || job.lang || 'pt-BR', o.author || s.author, s.cover);
+  }
+
+  // ---- OpenDocument / RTF / e-books (geradores próprios)
+  if (out === 'ods' || out === 'csv') {
+    let sheets;
+    if (SHEET.includes(inExt)) sheets = await B.sheets().readSheets(job.input, inExt);
+    else {
+      const tmp = await tmpFile('xlsx');
+      const r = await g.convertPdf(await toPdf(job.input, inExt, o, signal), { format: 'xlsx' });
+      await fsp.writeFile(tmp, Buffer.from(r.bytes));
+      sheets = await B.sheets().readSheets(tmp, 'xlsx');
+      fsp.rm(path.dirname(tmp), { recursive: true, force: true }).catch(() => {});
+    }
+    return out === 'ods' ? B.odf().writeOds(sheets, output) : B.sheets().writeCsv(sheets, output);
+  }
+  if (out === 'odp') {
+    let deck;
+    if (SLIDE.includes(inExt)) deck = await readSlides(job.input, inExt);
+    else {
+      const tmp = await tmpFile('pptx');
+      const r = await g.convertPdf(await toPdf(job.input, inExt, o, signal), { format: 'pptx' });
+      await fsp.writeFile(tmp, Buffer.from(r.bytes));
+      deck = B.slides().readPptx(tmp);
+      fsp.rm(path.dirname(tmp), { recursive: true, force: true }).catch(() => {});
+    }
+    return B.odf().writeOdp(deck, output);
+  }
+  if (['odt', 'rtf', 'mobi', 'fb2'].includes(out)) {
+    const s = await semantic(job.input, inExt, signal);
+    progress(0.45);
+    cancelled(signal);
+    const { blocks } = await htmlToBlocks(wrapHtml(s.html, s.title, s.css));
+    progress(0.75);
+    const meta = { title: o.title || s.title, author: o.author || s.author || '', lang: s.lang || job.lang || 'pt-BR', cover: s.cover };
+    if (out === 'odt') return B.odf().writeOdt(blocks, meta.title, output);
+    if (out === 'rtf') return fsp.writeFile(output, B.rtf().writeRtf(blocks, meta.title), 'latin1');
+    if (out === 'mobi') return B.ebooks().writeMobi(blocks, meta, output);
+    return B.ebooks().writeFb2(blocks, meta, output);
+  }
+  throw new Error(`UNSUPPORTED:${inExt}→${out}`);
+}
+
+/** Texto de um PDF (com o motor do GCP-PDF; recupera o texto linha a linha se necessário). */
+async function pdfText(input) {
+  const bytes = new Uint8Array(await fsp.readFile(input));
+  const r = await G().convertPdf(bytes, { format: 'txt' });
+  const text = Buffer.from(r.bytes).toString('utf8');
+  if (text.replace(/\s|\f/g, '').length) return text;
+  const pdf = await G().loadPdf(new Uint8Array(bytes));
+  const pages = [];
+  try {
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const c = await (await pdf.getPage(i)).getTextContent();
+      let line = '';
+      let lastY = null;
+      const lines = [];
+      for (const it of c.items) {
+        if (!('str' in it)) continue;
+        const y = Math.round(it.transform[5]);
+        if (lastY !== null && Math.abs(y - lastY) > 2) { lines.push(line); line = ''; }
+        line += it.str;
+        if (it.hasEOL) { lines.push(line); line = ''; lastY = null; continue; }
+        lastY = y;
+      }
+      if (line) lines.push(line);
+      pages.push(lines.map((l) => l.replace(/\s+$/, '')).join('\n').replace(/\n{3,}/g, '\n\n'));
+    }
+  } finally { await pdf.loadingTask.destroy(); }
+  return pages.join('\n\f\n');
+}
+
+/** PDF → imagens (uma por página), com o renderizador do GCP-PDF. */
+async function pdfToImages(input, outBase, ext, o = {}, onProgress, signal) {
+  const bytes = new Uint8Array(await fsp.readFile(input));
+  const pdf = await G().loadPdf(new Uint8Array(bytes));
+  const n = pdf.numPages;
+  await pdf.loadingTask.destroy();
+  const dpi = parseInt(o.dpi, 10) || 150;
+  const outs = [];
+  const { runFfmpeg } = require('./media');
+  for (let i = 0; i < n; i++) {
+    cancelled(signal);
+    const [page] = await G().renderPdfPages(new Uint8Array(bytes), [i], dpi, () => {});
+    const target = n === 1 ? `${outBase}.${ext}` : `${outBase}-${String(i + 1).padStart(3, '0')}.${ext}`;
+    if (ext === 'png') await fsp.writeFile(target, Buffer.from(page.bytes));
+    else {
+      const tmp = path.join(os.tmpdir(), `gcp-page-${Date.now()}-${i}.png`);
+      await fsp.writeFile(tmp, Buffer.from(page.bytes));
+      const q = parseInt(o.quality, 10) || 88;
+      const args = ext === 'jpg' ? ['-frames:v', '1', '-q:v', String(Math.round(31 - (q / 100) * 29))] : ext === 'webp' ? ['-frames:v', '1', '-c:v', 'libwebp', '-quality', String(q)] : ['-frames:v', '1'];
+      try { await runFfmpeg({ input: tmp, output: target, args }); } finally { fsp.rm(tmp, { force: true }).catch(() => {}); }
+    }
+    outs.push(target);
+    onProgress && onProgress((i + 1) / n);
+  }
+  return outs;
+}
+
+/* ------------------------------------------------------------------ */
+/* EPUB (fontes com texto corrido)                                      */
+/* ------------------------------------------------------------------ */
+
+async function buildEpub(xhtmlBody, title, output, lang = 'pt-BR', author = '', cover = '') {
   const JSZip = require('jszip');
   const zip = new JSZip();
   const uid = 'urn:uuid:' + require('crypto').randomUUID();
   const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
   zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
   zip.file('META-INF/container.xml', `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`);
-  // Divide em capítulos por <h1>
-  const body = xhtmlBody.replace(/^<body[^>]*>/, '').replace(/<\/body>$/, '');
+  let body = xhtmlBody.replace(/^<body[^>]*>/, '').replace(/<\/body>$/, '');
+  // imagens embutidas viram arquivos do EPUB
+  const images = [];
+  body = body.replace(/src="data:image\/(png|jpeg|gif|webp|svg\+xml);base64,([^"]+)"/g, (m, type, b64) => {
+    const ext = { jpeg: 'jpg', 'svg+xml': 'svg' }[type] || type;
+    const name = `images/img${images.length + 1}.${ext}`;
+    images.push({ name, type: `image/${type}`, data: Buffer.from(b64, 'base64') });
+    return `src="${name}"`;
+  });
   const chunks = body.split(/(?=<h1[\s>])/i).filter((c) => c.trim());
   const chapters = (chunks.length ? chunks : [body]).map((c, i) => {
     const h = (c.match(/<h[12][^>]*>([\s\S]*?)<\/h[12]>/i) || [])[1];
     return { id: `c${i + 1}`, title: h ? h.replace(/<[^>]+>/g, '').trim() : `${title} ${i + 1}`, body: c };
   });
-  const css = `body{font-family:serif;line-height:1.5;margin:0 5%;} h1,h2,h3{font-family:sans-serif;} img{max-width:100%;} pre{white-space:pre-wrap;}`;
-  zip.file('OEBPS/style.css', css);
+  zip.file('OEBPS/style.css', `body{font-family:serif;line-height:1.5;margin:0 5%;} h1,h2,h3{font-family:sans-serif;line-height:1.25} img{max-width:100%;height:auto} pre{white-space:pre-wrap} table{border-collapse:collapse} td,th{border:1px solid #999;padding:3px 6px}`);
   for (const ch of chapters) {
-    zip.file(`OEBPS/${ch.id}.xhtml`, `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}"><head><meta charset="utf-8"/><title>${escapeHtml(ch.title)}</title><link rel="stylesheet" href="style.css"/></head><body>${ch.body.replace(/ xmlns="http:\/\/www.w3.org\/1999\/xhtml"/g, '')}</body></html>`);
+    zip.file(`OEBPS/${ch.id}.xhtml`, `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="${lang}"><head><meta charset="utf-8"/><title>${esc(ch.title)}</title><link rel="stylesheet" href="style.css"/></head><body>${ch.body.replace(/ xmlns="http:\/\/www.w3.org\/1999\/xhtml"/g, '')}</body></html>`);
   }
-  zip.file('OEBPS/nav.xhtml', `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><meta charset="utf-8"/><title>${escapeHtml(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>${escapeHtml(title)}</h1><ol>${chapters.map((c) => `<li><a href="${c.id}.xhtml">${escapeHtml(c.title)}</a></li>`).join('')}</ol></nav></body></html>`);
+  for (const im of images) zip.file(`OEBPS/${im.name}`, im.data);
+  let coverItem = '';
+  let coverMeta = '';
+  if (cover) {
+    const m = cover.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/s);
+    if (m) {
+      const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+      zip.file(`OEBPS/images/cover.${ext}`, Buffer.from(m[2], 'base64'));
+      coverItem = `<item id="cover" href="images/cover.${ext}" media-type="image/${m[1] === 'jpg' ? 'jpeg' : m[1]}" properties="cover-image"/>`;
+      coverMeta = '<meta name="cover" content="cover"/>';
+    }
+  }
+  zip.file('OEBPS/nav.xhtml', `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><meta charset="utf-8"/><title>${esc(title)}</title></head><body><nav epub:type="toc" id="toc"><h1>${esc(title)}</h1><ol>${chapters.map((c) => `<li><a href="${c.id}.xhtml">${esc(c.title)}</a></li>`).join('')}</ol></nav></body></html>`);
   zip.file('OEBPS/content.opf', `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid" xml:lang="${lang}">
-<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">${uid}</dc:identifier><dc:title>${escapeHtml(title)}</dc:title><dc:language>${lang}</dc:language><dc:creator>GCP Converter</dc:creator><meta property="dcterms:modified">${now}</meta></metadata>
-<manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="css" href="style.css" media-type="text/css"/>${chapters.map((c) => `<item id="${c.id}" href="${c.id}.xhtml" media-type="application/xhtml+xml"/>`).join('')}</manifest>
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">${uid}</dc:identifier><dc:title>${esc(title)}</dc:title><dc:language>${lang}</dc:language>${author ? `<dc:creator>${esc(author)}</dc:creator>` : ''}<meta property="dcterms:modified">${now}</meta>${coverMeta}</metadata>
+<manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="css" href="style.css" media-type="text/css"/>${coverItem}${chapters.map((c) => `<item id="${c.id}" href="${c.id}.xhtml" media-type="application/xhtml+xml"/>`).join('')}${images.map((im, i) => `<item id="im${i + 1}" href="${im.name}" media-type="${im.type}"/>`).join('')}</manifest>
 <spine>${chapters.map((c) => `<itemref idref="${c.id}"/>`).join('')}</spine>
 </package>`);
   const buf = await zip.generateAsync({ type: 'nodebuffer', mimeType: 'application/epub+zip', compression: 'DEFLATE' });
   await fsp.writeFile(output, buf);
 }
 
+/* ------------------------------------------------------------------ */
+/* imagens, PDF e ZIP                                                  */
+/* ------------------------------------------------------------------ */
+
 async function imagesToPdf(inputs, output, opts = {}) {
   const { PDFDocument } = require('pdf-lib');
-  const { runFfmpeg } = require('./media');
   const pdf = await PDFDocument.create();
   const A4 = [595.28, 841.89];
   for (const input of inputs) {
     let ext = path.extname(input).slice(1).toLowerCase();
     let file = input;
     let tmp = null;
-    if (!['jpg', 'jpeg', 'png'].includes(ext)) {
-      tmp = path.join(os.tmpdir(), `gcp-img-${Date.now()}-${Math.random().toString(36).slice(2)}.png`);
-      await runFfmpeg({ input, output: tmp, args: ['-frames:v', '1'] });
-      file = tmp;
-      ext = 'png';
-    }
+    if (!['jpg', 'jpeg', 'png'].includes(ext)) { tmp = await imageToPng(input); file = tmp; ext = 'png'; }
     const bytes = await fsp.readFile(file);
     const img = ext === 'png' ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
     if (opts.pageSize === 'fit') {
-      const page = pdf.addPage([img.width, img.height]);
-      page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+      pdf.addPage([img.width, img.height]).drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
     } else {
       let [pw, ph] = opts.pageSize === 'Letter' ? [612, 792] : A4;
       if (opts.orientation === 'landscape' || (opts.orientation !== 'portrait' && img.width > img.height)) [pw, ph] = [ph, pw];
       const page = pdf.addPage([pw, ph]);
       const margin = 24;
       const scale = Math.min((pw - margin * 2) / img.width, (ph - margin * 2) / img.height, 1);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      page.drawImage(img, { x: (pw - w) / 2, y: (ph - h) / 2, width: w, height: h });
+      page.drawImage(img, { x: (pw - img.width * scale) / 2, y: (ph - img.height * scale) / 2, width: img.width * scale, height: img.height * scale });
     }
     if (tmp) fsp.rm(tmp, { force: true }).catch(() => {});
   }
@@ -330,53 +645,10 @@ async function imagesToPdf(inputs, output, opts = {}) {
   await fsp.writeFile(output, await pdf.save());
 }
 
-/* ------------------------------------------------------------------ */
-/* motores externos                                                    */
-/* ------------------------------------------------------------------ */
-
-async function viaLibreOffice(bin, input, outExt, output, signal) {
-  const outDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'gcp-lo-'));
-  const profile = await fsp.mkdtemp(path.join(os.tmpdir(), 'gcp-lo-profile-'));
-  const profileUrl = 'file://' + (process.platform === 'win32' ? '/' : '') + profile.replace(/\\/g, '/');
-  let filter = outExt;
-  if (outExt === 'txt') filter = 'txt:Text (encoded):UTF8';
-  if (outExt === 'csv') filter = 'csv:Text - txt - csv (StarCalc):44,34,76,1';
-  if (outExt === 'html') filter = 'html';
-  const inExt = path.extname(input).slice(1).toLowerCase();
-  // Entrada HTML abre no Writer/Web: é preciso indicar o filtro de exportação
-  if (['html', 'htm'].includes(inExt)) {
-    const web = { docx: 'docx:MS Word 2007 XML', odt: 'odt:writer8', rtf: 'rtf:Rich Text Format', pdf: 'pdf:writer_web_pdf_Export', txt: 'txt:Text (encoded):UTF8' };
-    if (web[outExt]) filter = web[outExt];
-  }
-  const args = [`-env:UserInstallation=${profileUrl}`, '--headless', '--norestore', '--nologo'];
-  if (inExt === 'pdf') args.push('--infilter=writer_pdf_import');
-  args.push('--convert-to', filter, '--outdir', outDir, input);
-  try {
-    await run(bin, args, { signal });
-    const files = await fsp.readdir(outDir);
-    const produced = files.find((f) => f.toLowerCase().endsWith('.' + outExt)) || files[0];
-    if (!produced) throw new Error('LibreOffice não gerou saída');
-    await moveFile(path.join(outDir, produced), output);
-  } finally {
-    fsp.rm(outDir, { recursive: true, force: true }).catch(() => {});
-    fsp.rm(profile, { recursive: true, force: true }).catch(() => {});
-  }
-}
-
-async function moveFile(src, dst) {
-  try {
-    await fsp.rename(src, dst);
-  } catch {
-    await fsp.copyFile(src, dst);
-    await fsp.rm(src, { force: true });
-  }
-}
-
 async function viaCalibre(bin, input, output, opts, signal, onProgress) {
   const args = [input, output];
   if (opts.title) args.push('--title', opts.title);
   if (opts.author) args.push('--authors', opts.author);
-  if (opts.cover) args.push('--cover', opts.cover);
   if (path.extname(output) === '.pdf') args.push('--paper-size', (opts.pageSize || 'a4').toLowerCase(), '--pdf-page-numbers');
   await new Promise((resolve, reject) => {
     const p = spawn(bin, args, { windowsHide: true });
@@ -396,78 +668,6 @@ async function viaCalibre(bin, input, output, opts, signal, onProgress) {
   });
 }
 
-async function viaPandoc(bin, input, inExt, outExt, output, signal) {
-  const fromMap = { md: 'markdown', markdown: 'markdown', htm: 'html', txt: 'markdown', tex: 'latex' };
-  const toMap = { md: 'gfm', txt: 'plain' };
-  const args = [input, '-f', fromMap[inExt] || inExt, '-t', toMap[outExt] || outExt, '-o', output, '--standalone'];
-  if (['docx', 'odt', 'epub'].includes(inExt)) args.push('--extract-media=' + path.join(path.dirname(output), path.basename(output, path.extname(output)) + '_media'));
-  await run(bin, args, { signal });
-}
-
-/* ------------------------------------------------------------------ */
-/* entrada principal                                                   */
-/* ------------------------------------------------------------------ */
-
-async function convertDocument(job, output, onProgress, signal) {
-  const tools = await detect();
-  const inExt = path.extname(job.input).slice(1).toLowerCase();
-  const outExt = job.ext;
-  const o = job.options || {};
-  const p = plan(inExt, outExt, tools, job.kind);
-  if (!p.engine) {
-    const names = (p.missing || []).map((m) => LABEL[m] || m).join(' ou ');
-    const err = new Error(names ? `MISSING_ENGINE:${names}` : `UNSUPPORTED:${inExt}→${outExt}`);
-    err.missing = p.missing;
-    throw err;
-  }
-  onProgress && onProgress(0.05);
-  job.engine = p.engine;
-
-  if (p.engine === 'copy') {
-    await fsp.copyFile(job.input, output);
-  } else if (p.engine === 'libreoffice') {
-    await viaLibreOffice(tools.libreoffice.path, job.input, outExt, output, signal);
-  } else if (p.engine === 'calibre') {
-    await viaCalibre(tools.calibre.path, job.input, output, o, signal, onProgress);
-  } else if (p.engine === 'pandoc') {
-    await viaPandoc(tools.pandoc.path, job.input, inExt, outExt, output, signal);
-  } else if (p.engine === 'poppler') {
-    const bin = tools.poppler.path.replace(/pdftoppm(\.exe)?$/i, (m, e) => (outExt === 'txt' ? 'pdftotext' : 'pdftohtml') + (e || ''));
-    await run(bin, outExt === 'txt' ? ['-layout', job.input, output] : ['-s', '-noframes', job.input, output], { signal });
-  } else if (p.engine === 'builtin+libreoffice') {
-    const src = await sourceToHtml(job.input, inExt);
-    const tmp = path.join(os.tmpdir(), `gcp-${Date.now()}.html`);
-    await fsp.writeFile(tmp, wrapHtml(src.html, src.title));
-    try {
-      await viaLibreOffice(tools.libreoffice.path, tmp, outExt, output, signal);
-    } finally {
-      fsp.rm(tmp, { force: true }).catch(() => {});
-    }
-  } else if (IMG_IN.includes(inExt) && outExt === 'pdf') {
-    await imagesToPdf([job.input], output, o);
-  } else {
-    // Embutido via HTML
-    const src = await sourceToHtml(job.input, inExt);
-    onProgress && onProgress(0.4);
-    const full = src.full && outExt === 'pdf' ? src.full : wrapHtml(src.html, src.title, o.extraCss || '');
-    if (outExt === 'pdf') await htmlToPdf(full, src.baseDir, output, o);
-    else if (outExt === 'html') await fsp.writeFile(output, wrapHtml(src.html, src.title));
-    else if (outExt === 'txt') await fsp.writeFile(output, src.plain != null ? src.plain : await htmlToText(full), 'utf8');
-    else if (outExt === 'md') {
-      if (inExt === 'docx') {
-        const mammoth = require('mammoth');
-        const r = await mammoth.convertToMarkdown({ path: job.input });
-        await fsp.writeFile(output, r.value, 'utf8');
-      } else if (inExt === 'txt') await fsp.copyFile(job.input, output);
-      else await fsp.writeFile(output, htmlToMarkdownBasic(src.html), 'utf8');
-    } else if (outExt === 'epub') {
-      const xhtml = await htmlToXhtml(wrapHtml(src.html, src.title));
-      await buildEpub(xhtml, o.title || src.title, output, job.lang || 'pt-BR');
-    }
-  }
-  return { engine: p.engine };
-}
-
 /** Compacta PDF com Ghostscript (ou regrava otimizado com pdf-lib). */
 async function compressPdf(input, output, level, signal) {
   const tools = await detect();
@@ -482,7 +682,6 @@ async function compressPdf(input, output, level, signal) {
   return { engine: 'builtin' };
 }
 
-/** Une vários PDFs em um só. */
 async function mergePdfs(inputs, output) {
   const { PDFDocument } = require('pdf-lib');
   const out = await PDFDocument.create();
@@ -495,7 +694,6 @@ async function mergePdfs(inputs, output) {
   await fsp.writeFile(output, await out.save());
 }
 
-/** Cria um arquivo ZIP com vários arquivos. */
 async function zipFiles(inputs, output, level = 6, onProgress) {
   const JSZip = require('jszip');
   const zip = new JSZip();
@@ -516,4 +714,4 @@ async function zipFiles(inputs, output, level = 6, onProgress) {
   });
 }
 
-module.exports = { plan, convertDocument, compressPdf, mergePdfs, zipFiles, imagesToPdf, htmlToPdf, LABEL };
+module.exports = { plan, convertDocument, compressPdf, mergePdfs, zipFiles, imagesToPdf, htmlToPdf, pdfToImages, toPdf, LABEL };

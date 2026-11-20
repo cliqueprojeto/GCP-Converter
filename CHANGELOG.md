@@ -3,6 +3,26 @@
 Todas as mudanças relevantes do GCP Converter são registradas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.1.0] - 2026-11-20
+
+### Novidades
+- **Conversão de documentos 100% embutida**: não é mais preciso instalar LibreOffice nem Calibre.
+  - Usa o **mesmo motor do GCP-PDF**, com a mesma ordem de prioridade: Microsoft Office (Windows, se instalado) → LibreOffice (se instalado) → motor interno. Word e Excel saem com o layout de página fiel, e PDF → DOCX/PPTX/XLSX/EPUB preserva o layout.
+  - Novos leitores próprios para **ODT, ODS, ODP, PPTX e RTF**, que preservam títulos, listas, tabelas, imagens, cores, mesclagens, formatos de moeda, porcentagem e data, tamanhos do slide mestre e formas.
+  - Novos geradores de **ODT, ODS, ODP, RTF, CSV, PPTX, MOBI e FB2**.
+  - **E-books**: leitura de MOBI, AZW, AZW3, FB2, CBZ, CBR e CB7, e geração de **MOBI (Kindle)** e **FB2** sem Calibre. O MOBI foi validado com o KindleUnpack.
+- **PDF → imagens**: a ferramenta Imagem converte cada página do PDF em JPG, PNG, WEBP e outros formatos.
+- **Nova ferramenta "Notas fiscais"** (XML → PDF no leiaute oficial, em lote e com opção de unir tudo em um PDF):
+  - **DANFSe v2.0** (NFS-e padrão nacional), reproduzindo o leiaute do Portal Nacional: chave de acesso, QR Code de autenticidade, prestador, tomador, intermediário, serviço (códigos de tributação nacional e NBS), ISSQN, tributação federal, IBS/CBS, totais e rodapé de certificação.
+  - **DANFE NFC-e** (modelo 65) em bobina de 80 mm, no padrão do cupom térmico: itens, totais, forma de pagamento, chave de acesso, consumidor, protocolo, QR Code, tributos da Lei 12.741 e avisos de contingência e homologação.
+  - **Extrato do CF-e SAT** (cupom fiscal eletrônico) com código de barras da chave e QR Code.
+  - **DANFE** (NF-e), NFS-e ABRASF e CT-e com o motor do GCP-PDF.
+- **Nome dos arquivos**: o nome original é preservado e recebe `_Convertido`, `_Compactado` ou `_Unido` no final, no idioma do aplicativo (`_Converted`/`_Compressed` em inglês e `_Convertido`/`_Comprimido` em espanhol). Arquivos já convertidos não recebem o sufixo de novo.
+
+### Alterações
+- LibreOffice, Calibre e Ghostscript passam a ser **opcionais**. Pandoc e Poppler não são mais usados.
+- Calibre só é necessário para gerar AZW3 e para formatos raros (KFX, LIT, LRF, PDB, DjVu).
+
 ## [1.0.1] - 2026-11-20
 
 ### Corrigido

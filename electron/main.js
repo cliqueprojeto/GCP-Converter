@@ -101,6 +101,8 @@ app.whenReady().then(async () => {
   history = new Store('history.json', []);
   stats = new Store('stats.json', { converted: 0, bytesIn: 0, bytesOut: 0, saved: 0, byCategory: {} });
   if (!settings.data.computerName) settings.data.computerName = os.hostname();
+  // 1.1: arquivos gerados recebem o sufixo _Convertido/_Compactado
+  if (!settings.data.namePattern || settings.data.namePattern === '{name}') { settings.data.namePattern = '{name}_{action}'; settings.save(); }
 
   queue = new JobQueue(() => settings.data);
   updater = new Updater({ store: settings, send });

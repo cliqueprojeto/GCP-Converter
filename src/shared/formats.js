@@ -48,7 +48,7 @@
     image: {
       icon: 'image',
       color: '#f472b6',
-      inputs: ['jpg', 'jpeg', 'png', 'webp', 'avif', 'bmp', 'tif', 'tiff', 'gif', 'ico', 'tga', 'jp2', 'jfif', 'pbm', 'pgm', 'ppm', 'pcx', 'dds', 'exr', 'hdr', 'svg', 'qoi'],
+      inputs: ['jpg', 'jpeg', 'png', 'webp', 'avif', 'bmp', 'tif', 'tiff', 'gif', 'ico', 'tga', 'jp2', 'jfif', 'pbm', 'pgm', 'ppm', 'pcx', 'dds', 'exr', 'hdr', 'svg', 'qoi', 'pdf'],
       targets: [
         { id: 'jpg', label: 'JPG', ext: 'jpg', tag: 'Fotos', hint: 'universal' },
         { id: 'png', label: 'PNG', ext: 'png', tag: 'Transparência', hint: 'lossless' },
@@ -64,7 +64,7 @@
     document: {
       icon: 'file-text',
       color: '#60a5fa',
-      inputs: ['pdf', 'doc', 'docx', 'odt', 'rtf', 'txt', 'md', 'markdown', 'html', 'htm', 'xls', 'xlsx', 'ods', 'csv', 'ppt', 'pptx', 'odp', 'epub', 'tex', 'rst', 'wpd', 'pages', 'key', 'numbers',
+      inputs: ['pdf', 'doc', 'docx', 'odt', 'rtf', 'txt', 'md', 'markdown', 'html', 'htm', 'xls', 'xlsx', 'ods', 'csv', 'ppt', 'pptx', 'odp', 'epub', 'xml', 'wpd', 'pages', 'key', 'numbers',
         'jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'],
       targets: [
         { id: 'pdf', label: 'PDF', ext: 'pdf', tag: 'Portátil', hint: 'universal' },
@@ -78,22 +78,34 @@
         { id: 'ods', label: 'ODS', ext: 'ods', tag: 'Planilha aberta', hint: 'sheet' },
         { id: 'csv', label: 'CSV', ext: 'csv', tag: 'Dados', hint: 'sheet' },
         { id: 'pptx', label: 'PPTX', ext: 'pptx', tag: 'PowerPoint', hint: 'slides' },
-        { id: 'odp', label: 'ODP', ext: 'odp', tag: 'Apresentação', hint: 'slides' }
+        { id: 'odp', label: 'ODP', ext: 'odp', tag: 'Apresentação', hint: 'slides' },
+        { id: 'epub', label: 'EPUB', ext: 'epub', tag: 'E-book', hint: 'ebook' }
       ]
     },
     ebook: {
       icon: 'book-open',
       color: '#fbbf24',
-      inputs: ['epub', 'mobi', 'azw', 'azw3', 'kfx', 'fb2', 'lit', 'pdb', 'lrf', 'cbz', 'cbr', 'cb7', 'djvu', 'pdf', 'docx', 'odt', 'rtf', 'txt', 'md', 'markdown', 'html', 'htm'],
+      inputs: ['epub', 'mobi', 'azw', 'azw3', 'kfx', 'fb2', 'lit', 'pdb', 'lrf', 'cbz', 'cbr', 'cb7', 'djvu', 'pdf', 'docx', 'odt', 'rtf', 'txt', 'md', 'markdown', 'html', 'htm', 'pptx', 'odp'],
       targets: [
         { id: 'epub', label: 'EPUB', ext: 'epub', tag: 'Padrão aberto', hint: 'universal' },
-        { id: 'mobi', label: 'MOBI', ext: 'mobi', tag: 'Kindle clássico', hint: 'kindle' },
-        { id: 'azw3', label: 'AZW3', ext: 'azw3', tag: 'Kindle moderno', hint: 'kindle' },
+        { id: 'mobi', label: 'MOBI', ext: 'mobi', tag: 'Kindle', hint: 'kindle' },
         { id: 'fb2', label: 'FB2', ext: 'fb2', tag: 'FictionBook', hint: 'open' },
         { id: 'pdf', label: 'PDF', ext: 'pdf', tag: 'Impressão', hint: 'print' },
         { id: 'docx', label: 'DOCX', ext: 'docx', tag: 'Word', hint: 'office' },
+        { id: 'odt', label: 'ODT', ext: 'odt', tag: 'LibreOffice', hint: 'open' },
+        { id: 'rtf', label: 'RTF', ext: 'rtf', tag: 'Rich Text', hint: 'legacy' },
         { id: 'txt', label: 'TXT', ext: 'txt', tag: 'Texto puro', hint: 'plain' },
-        { id: 'html', label: 'HTML', ext: 'html', tag: 'Página web', hint: 'web' }
+        { id: 'html', label: 'HTML', ext: 'html', tag: 'Página web', hint: 'web' },
+        { id: 'md', label: 'MD', ext: 'md', tag: 'Markdown', hint: 'plain' },
+        { id: 'azw3', label: 'AZW3', ext: 'azw3', tag: 'Kindle (Calibre)', hint: 'kindle' }
+      ]
+    },
+    fiscal: {
+      icon: 'receipt-text',
+      color: '#fb923c',
+      inputs: ['xml'],
+      targets: [
+        { id: 'pdf', label: 'PDF', ext: 'pdf', tag: 'Leiaute oficial', hint: 'fiscal' }
       ]
     },
     compress: {
@@ -110,9 +122,10 @@
   // Compactar aceita tudo que as outras categorias aceitam + PDF.
   const all = new Set();
   ['video', 'audio', 'image', 'document', 'ebook'].forEach((c) => CATEGORIES[c].inputs.forEach((e) => all.add(e)));
+  all.delete('xml');
   CATEGORIES.compress.inputs = Array.from(all);
 
-  const CATEGORY_ORDER = ['video', 'audio', 'image', 'document', 'ebook', 'compress'];
+  const CATEGORY_ORDER = ['video', 'audio', 'image', 'document', 'ebook', 'fiscal', 'compress'];
 
   /** Descobre a categoria "natural" de um arquivo pela extensão. */
   function detectCategory(ext) {
@@ -124,6 +137,7 @@
       ['ebook', ['epub', 'mobi', 'azw', 'azw3', 'kfx', 'fb2', 'lit', 'pdb', 'lrf', 'cbz', 'cbr', 'cb7', 'djvu']],
       ['document', CATEGORIES.document.inputs]
     ];
+    if (ext === 'xml') return 'fiscal';
     for (const [cat, list] of priority) if (list.includes(ext)) return cat;
     return null;
   }

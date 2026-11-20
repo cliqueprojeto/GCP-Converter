@@ -14,8 +14,8 @@
   const SITE = 'https://www.gestaoculturalpro.com.br';
   const REPO = 'https://github.com/cliqueprojeto/GCP-Converter';
 
-  const CAT_COLORS = { video: '#a78bfa', audio: '#22d3ee', image: '#f472b6', document: '#60a5fa', ebook: '#fbbf24', compress: '#34d399' };
-  const ROUTES = ['home', 'video', 'audio', 'image', 'document', 'ebook', 'compress', 'queue', 'history', 'settings'];
+  const CAT_COLORS = { video: '#a78bfa', audio: '#22d3ee', image: '#f472b6', document: '#60a5fa', ebook: '#fbbf24', fiscal: '#fb923c', compress: '#34d399' };
+  const ROUTES = ['home', 'video', 'audio', 'image', 'document', 'ebook', 'fiscal', 'compress', 'queue', 'history', 'settings'];
 
   const DEFAULT_OPTS = {
     video: { quality: 'balanced', resolution: 'original', fps: 'original', videoCodec: 'auto', audioCodec: 'auto', audioBitrate: '160', speed: 'balanced', trimStart: '', trimEnd: '', rotate: '0', flip: '', mute: false, normalize: false, deinterlace: false, grayscale: false, speedFactor: '1', subtitles: 'copy' },
@@ -23,15 +23,16 @@
     image: { quality: 85, maxSide: 'original', width: '', height: '', rotate: '0', flip: '', grayscale: false, palette: false, pageSize: 'A4', orientation: 'auto' },
     document: { pageSize: 'A4', orientation: 'portrait', mergePdf: false },
     ebook: { title: '', author: '', pageSize: 'A4' },
+    fiscal: { mergePdf: false },
     compress: { level: 'medium', targetMb: '25', zipLevel: 6, zipName: '', resolution: '' }
   };
-  const DEFAULT_TARGET = { video: 'mp4', audio: 'mp3', image: 'webp', document: 'pdf', ebook: 'epub', compress: 'same' };
+  const DEFAULT_TARGET = { video: 'mp4', audio: 'mp3', image: 'webp', document: 'pdf', ebook: 'epub', fiscal: 'pdf', compress: 'same' };
 
   const state = {
     route: 'home',
     settings: {},
     info: {},
-    files: { video: [], audio: [], image: [], document: [], ebook: [], compress: [] },
+    files: { video: [], audio: [], image: [], document: [], ebook: [], fiscal: [], compress: [] },
     target: { ...DEFAULT_TARGET },
     preset: { video: 'custom', audio: 'custom', image: 'custom' },
     opts: JSON.parse(JSON.stringify(DEFAULT_OPTS)),
@@ -108,7 +109,7 @@
     const c = CAT_COLORS[cat];
     const chips = {
       video: ['MP4', 'MKV', 'WEBM'], audio: ['MP3', 'FLAC', 'WAV'], image: ['JPG', 'PNG', 'WEBP'],
-      document: ['PDF', 'DOCX', 'ODT'], ebook: ['EPUB', 'MOBI', 'AZW3'], compress: ['ZIP', 'PDF', 'MP4']
+      document: ['PDF', 'DOCX', 'ODT'], ebook: ['EPUB', 'MOBI', 'FB2'], fiscal: ['NF-e', 'NFC-e', 'NFS-e'], compress: ['ZIP', 'PDF', 'MP4']
     }[cat];
     const glyph = {
       video: `<rect x="-34" y="-24" width="68" height="48" rx="9" fill="${c}" opacity=".95"/><path d="M-8-11 13 0-8 11z" fill="#0b1120"/><g fill="#0b1120" opacity=".35"><rect x="-30" y="-20" width="5" height="5" rx="1"/><rect x="-30" y="-8" width="5" height="5" rx="1"/><rect x="-30" y="4" width="5" height="5" rx="1"/><rect x="-30" y="15" width="5" height="5" rx="1"/><rect x="25" y="-20" width="5" height="5" rx="1"/><rect x="25" y="-8" width="5" height="5" rx="1"/><rect x="25" y="4" width="5" height="5" rx="1"/><rect x="25" y="15" width="5" height="5" rx="1"/></g>`,
@@ -116,6 +117,7 @@
       image: `<rect x="-34" y="-26" width="68" height="52" rx="9" fill="${c}"/><circle cx="14" cy="-10" r="6" fill="#0b1120" opacity=".55"/><path d="M-34 18 -12 -4 4 12 14 4 34 22v-4 4a9 9 0 0 1-9 4h-50a9 9 0 0 1-9-9z" fill="#0b1120" opacity=".45"/>`,
       document: `<rect x="-22" y="-30" width="44" height="58" rx="6" fill="${c}" opacity=".45" transform="rotate(-8)"/><rect x="-22" y="-30" width="44" height="58" rx="6" fill="${c}"/><g fill="#0b1120" opacity=".4"><rect x="-14" y="-20" width="28" height="4" rx="2"/><rect x="-14" y="-11" width="22" height="4" rx="2"/><rect x="-14" y="-2" width="28" height="4" rx="2"/><rect x="-14" y="7" width="18" height="4" rx="2"/></g>`,
       ebook: `<path d="M0-20C-10-27-24-28-36-25v48c12-3 26-2 36 5z" fill="${c}"/><path d="M0-20C10-27 24-28 36-25v48c-12-3-26-2-36 5z" fill="${c}" opacity=".7"/><g stroke="#0b1120" stroke-opacity=".35" stroke-width="2.5" stroke-linecap="round"><path d="M-28-14h20M-28-6h20M-28 2h14"/><path d="M8-14h20M8-6h20M8 2h14"/></g>`,
+      fiscal: `<path d="M-24-32h48v64l-8-6-8 6-8-6-8 6-8-6-8 6z" fill="${c}"/><g fill="#0b1120" opacity=".4"><rect x="-16" y="-22" width="32" height="4" rx="2"/><rect x="-16" y="-13" width="22" height="4" rx="2"/><rect x="-16" y="-4" width="28" height="4" rx="2"/></g><g fill="#0b1120" opacity=".55"><rect x="2" y="6" width="5" height="5"/><rect x="9" y="6" width="5" height="5"/><rect x="2" y="13" width="5" height="5"/><rect x="11" y="13" width="3" height="3"/></g>`,
       compress: `<rect x="-36" y="-22" width="34" height="44" rx="6" fill="${c}" opacity=".5"/><rect x="10" y="-11" width="22" height="28" rx="5" fill="${c}"/><path d="M-1 0h7m-4-4 4 4-4 4" stroke="${c}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`
     }[cat];
     return `<svg class="art" viewBox="0 0 320 118" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
@@ -217,6 +219,7 @@
       `<div class="nav-section">${t('nav.section.convert')}</div>`,
       ...['video', 'audio', 'image', 'document', 'ebook'].map((c) => navItem(c, F.CATEGORIES[c].icon, t(`nav.${c}`), cnt(c))),
       `<div class="nav-section">${t('nav.section.tools')}</div>`,
+      navItem('fiscal', 'receipt-text', t('nav.fiscal'), cnt('fiscal')),
       navItem('compress', 'minimize-2', t('nav.compress'), cnt('compress')),
       navItem('queue', 'list-video', t('nav.queue'), active ? `<span class="count">${active}</span>` : ''),
       navItem('history', 'history', t('nav.history')),
@@ -346,7 +349,7 @@
     const tDef = C.targets.find((x) => x.id === target) || C.targets[0];
     let btnLabel = t('page.convert', { n: valid.length });
     if (cat === 'compress') btnLabel = target === 'zip' ? t('page.convertZip', { n: valid.length }) : t('page.compressBtn', { n: valid.length });
-    if (cat === 'document' && target === 'pdf' && state.opts.document.mergePdf && valid.length > 1) btnLabel = t('opt.mergePdf');
+    if ((cat === 'document' || cat === 'fiscal') && target === 'pdf' && state.opts[cat].mergePdf && valid.length > 1) btnLabel = t('opt.mergePdf');
     const acceptList = cat === 'compress' ? 'MP4, MOV, MKV, MP3, WAV, JPG, PNG, PDF, DOCX…' : C.inputs.slice(0, 14).map((e) => e.toUpperCase()).join(', ') + (C.inputs.length > 14 ? '…' : '');
     return `
       <div class="page-head" style="--c:${color}">
@@ -425,7 +428,7 @@
     </div>`;
   }
   function engineName(id) {
-    return { libreoffice: 'LibreOffice', calibre: 'Calibre', pandoc: 'Pandoc', ghostscript: 'Ghostscript', poppler: 'Poppler' }[id] || id;
+    return { libreoffice: 'LibreOffice', calibre: 'Calibre', ghostscript: 'Ghostscript', office: 'Microsoft Office / LibreOffice' }[id] || id;
   }
 
   function presetsPanel(cat) {
@@ -549,6 +552,12 @@
     if (cat === 'document') {
       return `<div class="opts">
         ${target === 'pdf' ? docPageOpts('document') + sw('mergePdf', t('opt.mergePdf'), 'combine', cat) : `<div class="fmt-hint">${ic('info')}<span>${t('hint.' + (F.findTarget('document', target) || {}).hint)}</span></div>`}
+      </div>`;
+    }
+    if (cat === 'fiscal') {
+      return `<div class="opts">
+        <div class="fmt-hint">${ic('badge-check')}<span>${t('fiscal.types')}</span></div>
+        ${sw('mergePdf', t('opt.mergePdf'), 'combine', cat)}
       </div>`;
     }
     if (cat === 'ebook') {
@@ -982,9 +991,9 @@
   function enginesView() {
     const tl = state.tools;
     const pm = state.info.platform === 'win32' ? 'win' : state.info.platform === 'darwin' ? 'mac' : ({ pacman: 'arch', deb: 'deb', rpm: 'rpm' }[(state.info.install || {}).kind] || 'deb');
-    const colors = { ffmpeg: '#34d399', chromium: '#4cc3f5', builtin: '#a78bfa', libreoffice: '#60a5fa', calibre: '#fbbf24', pandoc: '#f472b6', ghostscript: '#94a3b8', poppler: '#22d3ee' };
-    const icons = { ffmpeg: 'film', chromium: 'globe', builtin: 'package', libreoffice: 'file-text', calibre: 'book-open', pandoc: 'file-code', ghostscript: 'file-minus', poppler: 'file-search' };
-    const ids = ['ffmpeg', 'chromium', 'builtin', 'libreoffice', 'calibre', 'pandoc', 'ghostscript', 'poppler'];
+    const colors = { ffmpeg: '#34d399', chromium: '#4cc3f5', builtin: '#a78bfa', ebooks: '#fbbf24', libreoffice: '#60a5fa', calibre: '#f59e0b', ghostscript: '#94a3b8' };
+    const icons = { ffmpeg: 'film', chromium: 'globe', builtin: 'file-text', ebooks: 'book-open', libreoffice: 'file-cog', calibre: 'library', ghostscript: 'file-minus' };
+    const ids = ['ffmpeg', 'builtin', 'ebooks', 'chromium', 'libreoffice', 'calibre', 'ghostscript'];
     return `<div class="set-card" style="padding:18px 22px"><h3 style="margin-top:0">${t('eng.title')}</h3><p style="color:var(--text-2);margin:0 0 4px;line-height:1.6">${t('eng.sub')}</p>
       <div style="margin-top:12px"><button class="btn btn-sm" data-action="refresh-tools">${ic('refresh-cw')} ${t('eng.refresh')}</button></div></div>
       <div class="eng-grid">${ids.filter((id) => tl[id]).map((id) => {
@@ -993,7 +1002,8 @@
         return `<div class="eng">
           <div class="eng-top"><div class="eng-ic" style="background:${colors[id]}1f;color:${colors[id]}">${ic(icons[id])}</div>
             <div><b>${esc(e.name)}</b><small>${t(`eng.purpose.${e.purpose}`)}${e.version ? ` · v${esc(e.version)}` : ''}</small></div>
-            <span class="eng-state ${e.available ? 'ok' : 'no'}">${e.bundled ? t('eng.bundled') : e.available ? t('eng.installed') : t('eng.missing')}</span></div>
+            <span class="eng-state ${e.available ? 'ok' : 'opt'}">${e.bundled ? t('eng.bundled') : e.available ? t('eng.installed') : t('eng.optional')}</span></div>
+          ${e.optional ? `<small class="eng-note">${t(`eng.note.${id}`)}</small>` : ''}
           ${!e.available && cmd ? `<code><span>${esc(cmd)}</span><button data-action="copy" data-text="${esc(cmd)}" title="${t('eng.copy')}">${ic('copy')}</button></code>` : ''}
           ${!e.available && e.url ? `<div><button class="btn btn-sm" data-action="external" data-url="${esc(e.url)}">${ic('download')} ${t('eng.download')}</button></div>` : ''}
         </div>`;
