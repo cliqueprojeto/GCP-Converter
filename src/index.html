@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file: blob:; font-src 'self' data:; connect-src 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GCP Converter</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <img class="brand-logo" src="../assets/icon.svg" alt="" />
+        <div>
+          <div class="brand-name">GCP Converter</div>
+          <div class="brand-tag" data-i18n="app.tagline"></div>
+        </div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sidebar-foot">
+        <div class="status-pill" id="statusPill"><span class="dot"></span><span id="statusText"></span></div>
+        <div class="version" id="versionText"></div>
+        <a class="credit" href="https://www.gestaoculturalpro.com.br" target="_blank" rel="noopener">
+          <span data-i18n="footer.devBy"></span> <b>Bruno Albertini</b><br /><span class="credit-org">Gestão Cultural Pro</span>
+        </a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="omnibox" id="omnibox" tabindex="0" role="button">
+          <span class="ic" data-icon="upload-cloud"></span>
+          <span class="omnibox-text" data-i18n="top.search"></span>
+          <button class="btn btn-primary" id="omniAdd"><span data-icon="plus"></span><span data-i18n="top.add"></span></button>
+        </div>
+        <div class="top-actions">
+          <button class="icon-btn queue-btn" id="queueBtn" title=""><span data-icon="list-video"></span><span class="ring" id="queueRing"></span><span class="badge hidden" id="queueBadge">0</span></button>
+          <button class="icon-btn" id="themeBtn"><span data-icon="sun-moon"></span></button>
+          <button class="icon-btn heart" id="heartBtn"><span data-icon="heart"></span></button>
+        </div>
+      </header>
+      <section class="view" id="view"></section>
+    </main>
+  </div>
+
+  <div class="drop-overlay" id="dropOverlay">
+    <div class="drop-overlay-card">
+      <div class="drop-overlay-icon"><span data-icon="file-down"></span></div>
+      <div class="drop-overlay-title" data-i18n="home.drop.title"></div>
+    </div>
+  </div>
+  <div class="modal-root" id="modalRoot"></div>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="shared/formats.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

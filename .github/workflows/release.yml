@@ -1,0 +1,107 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - name: Ferramentas de empacotamento (rpm, pacman)
+        run: sudo apt-get update && sudo apt-get install -y rpm libarchive-tools zstd
+      - run: npm ci
+      - run: npx electron-builder --linux deb rpm pacman AppImage --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.pkg.tar.zst
+            dist/*.AppImage
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx electron-builder --win nsis --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*.exe
+
+  macos:
+    strategy:
+      matrix:
+        arch: [arm64, x64]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - name: Dependências (${{ matrix.arch }})
+        run: npm ci
+        env:
+          npm_config_arch: ${{ matrix.arch }}
+      - run: npx electron-builder --mac dmg --${{ matrix.arch }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-${{ matrix.arch }}
+          path: dist/*.dmg
+
+  release:
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts, merge-multiple: true }
+      - name: Notas da versão (CHANGELOG.md)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" {found=1; next}
+            found && /^## \[/ {exit}
+            found {print}
+          ' CHANGELOG.md > notes.md
+          cat >> notes.md <<'MD'
+
+          ---
+
+          ### Downloads
+
+          | Sistema | Arquivo |
+          |---|---|
+          | Windows 10/11 | `GCP-Converter-Setup-*-x64.exe` |
+          | macOS Apple Silicon (M1+) | `GCP-Converter-*-arm64.dmg` |
+          | macOS Intel | `GCP-Converter-*-x64.dmg` |
+          | Debian / Ubuntu / Mint | `GCP-Converter-*-amd64.deb` |
+          | Fedora / openSUSE | `GCP-Converter-*-x86_64.rpm` |
+          | Arch / BigLinux / Manjaro | `GCP-Converter-*-x86_64.pkg.tar.zst` |
+          | Qualquer Linux | `GCP-Converter-*-x86_64.AppImage` |
+
+          Desenvolvido por [Bruno Albertini | Gestão Cultural Pro](https://www.gestaoculturalpro.com.br)
+          MD
+          sed -i 's/^          //' notes.md
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la artifacts
+          gh release create "$GITHUB_REF_NAME" artifacts/* \
+            --title "GCP Converter ${GITHUB_REF_NAME}" \
+            --notes-file notes.md

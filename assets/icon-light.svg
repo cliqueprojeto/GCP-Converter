@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".6" stop-color="#f6f2ff"/>
+      <stop offset="1" stop-color="#fbeaf6"/>
+    </linearGradient>
+    <radialGradient id="shine" cx=".3" cy=".1" r=".9">
+      <stop offset="0" stop-color="#fff" stop-opacity=".35"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity=".04"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="badge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff5fb0"/>
+      <stop offset="1" stop-color="#d9278f"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6d4af0"/>
+      <stop offset="1" stop-color="#c13fd0"/>
+    </linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#5b21b6" flood-opacity=".22"/>
+    </filter>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="230" fill="url(#bg)"/>
+  <rect x="32" y="32" width="960" height="960" rx="230" fill="url(#shine)"/>
+  <rect x="33.5" y="33.5" width="957" height="957" rx="228.5" fill="none" stroke="#7c3aed" stroke-opacity=".18" stroke-width="3"/>
+  <!-- arquivo de trás -->
+  <g transform="rotate(-9 380 430)" opacity=".28">
+    <path d="M222 218a44 44 0 0 1 44-44h184l118 118v330a44 44 0 0 1-44 44H266a44 44 0 0 1-44-44z" fill="#7c3aed"/>
+  </g>
+  <!-- arquivo da frente -->
+  <g filter="url(#sh)">
+    <path d="M370 272a48 48 0 0 1 48-48h214l140 140v382a48 48 0 0 1-48 48H418a48 48 0 0 1-48-48z" fill="#fff" stroke="#e4dafe" stroke-width="6"/>
+    <path d="M632 224v92a48 48 0 0 0 48 48h92z" fill="#e4dafe"/>
+  </g>
+  <!-- play / mídia -->
+  <rect x="428" y="420" width="208" height="150" rx="26" fill="url(#ink)"/>
+  <path d="M510 462v66l56-33z" fill="#fff"/>
+  <rect x="428" y="604" width="250" height="26" rx="13" fill="#c9b8fb"/>
+  <rect x="428" y="656" width="170" height="26" rx="13" fill="#e4dafe"/>
+  <!-- selo de conversão -->
+  <g filter="url(#sh)">
+    <rect x="600" y="590" width="300" height="300" rx="86" fill="url(#badge)" stroke="#fff" stroke-opacity=".9" stroke-width="10"/>
+  </g>
+  <g fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M818 708a82 82 0 0 0-148-18"/>
+    <path d="M676 662v36h36"/>
+    <path d="M682 772a82 82 0 0 0 148 18"/>
+    <path d="M824 818v-36h-36"/>
+  </g>
+</svg>

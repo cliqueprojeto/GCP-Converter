@@ -1,0 +1,233 @@
+{
+  "name": "gcp-converter",
+  "productName": "GCP Converter",
+  "version": "1.0.0",
+  "description": "Conversor universal de áudio, vídeo, imagens, documentos e e-books, com compactação e conversão em lote.",
+  "main": "electron/main.js",
+  "homepage": "https://github.com/cliqueprojeto/GCP-Converter",
+  "author": {
+    "name": "Bruno Albertini | Gestão Cultural Pro",
+    "email": "cliqueprojeto@gmail.com",
+    "url": "https://www.gestaoculturalpro.com.br"
+  },
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cliqueprojeto/GCP-Converter.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "icons": "node scripts/build-icons.js",
+    "test": "node scripts/e2e.js",
+    "dist": "electron-builder --publish never",
+    "dist:linux": "electron-builder --linux --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.3.0",
+    "jszip": "^3.10.2",
+    "mammoth": "^1.13.0",
+    "marked": "^18.2.1",
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
+    "lucide-static": "^1.77.0"
+  },
+  "build": {
+    "appId": "br.com.gestaoculturalpro.gcpconverter",
+    "productName": "GCP Converter",
+    "executableName": "gcp-converter",
+    "copyright": "Copyright © 2026 Bruno Albertini | Gestão Cultural Pro",
+    "artifactName": "GCP-Converter-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "assets/**/*",
+      "CHANGELOG.md",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      "package.json",
+      "!node_modules/ffmpeg-static/{README.md,example.js,types}",
+      "!**/*.map"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "mp4",
+          "mkv",
+          "webm",
+          "mov",
+          "avi"
+        ],
+        "name": "Video",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "mp3",
+          "wav",
+          "flac",
+          "m4a",
+          "ogg"
+        ],
+        "name": "Audio",
+        "role": "Viewer"
+      },
+      {
+        "ext": [
+          "epub",
+          "mobi",
+          "azw3"
+        ],
+        "name": "E-book",
+        "role": "Viewer"
+      }
+    ],
+    "linux": {
+      "target": [
+        "deb",
+        "rpm",
+        "pacman",
+        "AppImage"
+      ],
+      "category": "AudioVideo",
+      "icon": "build/icons",
+      "maintainer": "Bruno Albertini <cliqueprojeto@gmail.com>",
+      "vendor": "Gestão Cultural Pro",
+      "synopsis": "Conversor universal de vídeo, áudio, imagens, documentos e e-books",
+      "description": "Conversor universal de áudio, vídeo, imagens, documentos e e-books com compactação inteligente e conversão em lote.",
+      "desktop": {
+        "entry": {
+          "Name": "GCP Converter",
+          "GenericName": "Conversor de arquivos",
+          "Comment": "Converta vídeo, áudio, imagens, documentos e e-books",
+          "Keywords": "converter;conversor;video;audio;mp4;mp3;pdf;epub;compress;",
+          "StartupWMClass": "GCP Converter"
+        }
+      },
+      "mimeTypes": [
+        "video/mp4",
+        "video/x-matroska",
+        "video/webm",
+        "video/quicktime",
+        "audio/mpeg",
+        "audio/flac",
+        "audio/x-wav",
+        "application/epub+zip",
+        "application/pdf"
+      ],
+      "syncDesktopName": true
+    },
+    "deb": {
+      "recommends": [
+        "libreoffice-writer",
+        "calibre",
+        "pandoc",
+        "ghostscript",
+        "poppler-utils"
+      ],
+      "artifactName": "GCP-Converter-${version}-amd64.deb"
+    },
+    "rpm": {
+      "artifactName": "GCP-Converter-${version}-x86_64.rpm",
+      "fpm": [
+        "--rpm-rpmbuild-define=_build_id_links none"
+      ]
+    },
+    "pacman": {
+      "artifactName": "GCP-Converter-${version}-x86_64.pkg.tar.zst",
+      "fpm": [
+        "--pacman-compression",
+        "zstd",
+        "--pacman-optional-depends",
+        "libreoffice-fresh: documentos do Office",
+        "--pacman-optional-depends",
+        "calibre: e-books MOBI/AZW3",
+        "--pacman-optional-depends",
+        "pandoc-cli: Markdown e formatos de texto",
+        "--pacman-optional-depends",
+        "ghostscript: compactacao de PDF"
+      ]
+    },
+    "appImage": {
+      "artifactName": "GCP-Converter-${version}-x86_64.AppImage"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "GCP Converter",
+      "artifactName": "GCP-Converter-Setup-${version}-x64.${ext}",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "language": "1046",
+      "multiLanguageInstaller": true,
+      "runAfterFinish": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "hardenedRuntime": false,
+      "identity": null,
+      "artifactName": "GCP-Converter-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "GCP Converter ${version}",
+      "background": "build/dmg-background.png",
+      "window": {
+        "width": 620,
+        "height": 420
+      },
+      "contents": [
+        {
+          "x": 170,
+          "y": 210
+        },
+        {
+          "x": 450,
+          "y": 210,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "cliqueprojeto",
+        "repo": "GCP-Converter",
+        "releaseType": "release"
+      }
+    ],
+    "afterPack": "scripts/after-pack.js"
+  },
+  "desktopName": "gcp-converter.desktop"
+}
